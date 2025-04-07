@@ -1,8 +1,9 @@
 // Basic functions required by FIPS-203
 
 use crate::types::{Bytes, Bytes32, IntRange2To3};
+use anyhow::Result;
 use sha3::{
-    Shake256,
+    Digest, Sha3_256, Shake256,
     digest::{ExtendableOutput, Update},
 };
 
@@ -25,9 +26,45 @@ pub fn prf(n: IntRange2To3, s: &Bytes32, b: &Bytes) -> Bytes {
         }
     }
 }
+
+/// S4.1 H
+pub fn h(s: &Bytes) -> Result<Bytes32> {
+    let mut hasher = Sha3_256::new();
+    Update::update(&mut hasher, s.as_bytes());
+    let rv = hasher.finalize();
+    Bytes32::try_from(rv.as_slice())
+}
+
+/// S4.1 J
+pub fn j(s: &Bytes) -> Result<Bytes32> {
+    let mut hasher = Shake256::default();
+    hasher.update(s.as_bytes());
+    let mut output = [0u8; 32];
+    hasher.finalize_xof_into(&mut output);
+    Ok(Bytes32::new(output))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_j() {
+        let test_input = Bytes::from_hex("3664bd9582a9044ae82b10d5bd368f7a").unwrap();
+        let expected_output =
+            Bytes32::from_hex("b4c117f00bb0ebfadcdcf9e7aff1cbf0bf44e5c6f0eec5686e29d0c25e72cd85")
+                .unwrap();
+        assert_eq!(expected_output, j(&test_input).unwrap());
+    }
+
+    #[test]
+    fn test_h() {
+        let test_input = Bytes::from_hex("f20e7d42bbe29148c4d3e9e0556d14d2").unwrap();
+        let expected_output =
+            Bytes32::from_hex("cb86ad64b294f4ace98d08c736752476e6c033b5e54bee859f8ec168bb3d53d5")
+                .unwrap();
+        assert_eq!(expected_output, h(&test_input).unwrap());
+    }
 
     #[test]
     fn test_prf() {

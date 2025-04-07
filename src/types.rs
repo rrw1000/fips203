@@ -5,6 +5,12 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bytes(Vec<u8>);
 
+impl Default for Bytes {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
+}
+
 impl Bytes {
     pub fn new() -> Self {
         Self(Vec::new())
@@ -32,6 +38,12 @@ impl Bytes {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bytes32([u8; 32]);
 
+impl Default for Bytes32 {
+    fn default() -> Self {
+        Self([0u8; 32])
+    }
+}
+
 impl Bytes32 {
     pub fn new(bytes: [u8; 32]) -> Self {
         Self(bytes)
@@ -57,6 +69,19 @@ impl Bytes32 {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&decoded);
         Ok(Self(bytes))
+    }
+    
+    pub fn try_from(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() != 32 {
+            return Err(anyhow::anyhow!(
+                "Invalid byte slice length: expected 32 bytes, got {}", bytes.len()
+            ));
+        }
+        
+        let mut array = [0u8; 32];
+        array.copy_from_slice(bytes);
+        
+        Ok(Self(array))
     }
 }
 
@@ -150,5 +175,39 @@ mod tests {
         // Test invalid length
         let result = Bytes32::from_hex("deadbeef");
         assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_bytes32_try_from() {
+        // Test valid 32-byte array
+        let bytes: Vec<u8> = (0..32).collect();
+        let result = Bytes32::try_from(&bytes).unwrap();
+        
+        let expected: [u8; 32] = [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31,
+        ];
+        assert_eq!(result.as_bytes(), &expected);
+        
+        // Test invalid length
+        let short_bytes = vec![0; 16];
+        let result = Bytes32::try_from(&short_bytes);
+        assert!(result.is_err());
+        
+        let long_bytes = vec![0; 64];
+        let result = Bytes32::try_from(&long_bytes);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_defaults() {
+        // Test Bytes default
+        let default_bytes = Bytes::default();
+        assert_eq!(default_bytes.as_bytes().len(), 0);
+        
+        // Test Bytes32 default
+        let default_bytes32 = Bytes32::default();
+        let all_zeros = [0u8; 32];
+        assert_eq!(default_bytes32.as_bytes(), &all_zeros);
     }
 }
