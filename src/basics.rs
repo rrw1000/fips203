@@ -3,7 +3,7 @@
 use crate::types::{Bytes, Bytes32, IntRange2To3};
 use anyhow::Result;
 use sha3::{
-    Digest, Sha3_256, Shake256,
+    Digest, Sha3_256, Sha3_512, Shake256,
     digest::{ExtendableOutput, Update},
 };
 
@@ -44,9 +44,34 @@ pub fn j(s: &Bytes) -> Result<Bytes32> {
     Ok(Bytes32::new(output))
 }
 
+/// S4 1.G
+pub fn g(s: &Bytes) -> Result<(Bytes32, Bytes32)> {
+    let mut hasher = Sha3_512::new();
+    Update::update(&mut hasher, s.as_bytes());
+    let rv: [u8; 64] = hasher.finalize().as_slice().try_into()?;
+    Ok((
+        Bytes32::try_from(&rv[0..32])?,
+        Bytes32::try_from(&rv[32..64])?,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_g() {
+        let test_input = Bytes::from_hex("a453b5addf93e22deecd1c263041aa6f").unwrap();
+        let expected_output =
+            Bytes::from_hex("1e967a12a311e816dfcfcae978aa908e2d83d03409047e9423440de6491d5048e8692661ed379ab44fd766cfd5185fd835a8d98e3e096e40a801d0d544025195")
+            .unwrap();
+        let some_bytes = expected_output.as_bytes();
+        let expect_left = Bytes32::try_from(&some_bytes[0..32]).unwrap();
+        let expect_right = Bytes32::try_from(&some_bytes[32..64]).unwrap();
+        let (left, right) = g(&test_input).unwrap();
+        assert_eq!(expect_left, left);
+        assert_eq!(expect_right, right);
+    }
 
     #[test]
     fn test_j() {
