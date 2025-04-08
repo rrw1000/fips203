@@ -109,9 +109,101 @@ pub fn decompress(y: u32, d: u8) -> u32 {
     ((((Q << 1) * y) / (1 << d)) + 1) >> 1
 }
 
+// S4 4.2.1
+// @todo this could be speeded up substantially by not copying the data twice.
+pub fn byte_encode(values: &[u32], d: u8) -> Result<Bytes> {
+    let mut some_bits = Vec::<u8>::new();
+    let m = if d < 12 { 1 << d } else { Q };
+    if values.len() != 256 {
+        return Err(anyhow!("Require 256 values for byte_encode"));
+    }
+    values.iter().for_each(|x| {
+        let mut x_tmp = *x % m;
+        for _ in 0..d {
+            some_bits.push((x_tmp & 1).try_into().unwrap());
+            x_tmp >>= 1;
+        }
+    });
+    bits_to_bytes(&Bits::from(some_bits))
+}
+
+// S4 4.2.1
+pub fn byte_decode(bits: &Bytes, d: u8) -> Result<[u32; 256]> {
+    let mut result: [u32; 256] = [0; 256];
+    let bits = bytes_to_bits(bits)?;
+    if bits.len() != usize::from(d) * 256 {
+        return Err(anyhow!(
+            "Expecting {} bits, got {}",
+            usize::from(d) * 256,
+            bits.len()
+        ));
+    }
+    let bit_slice = bits.as_slice();
+    let mut bit_idx = 0;
+    for elem in result.iter_mut() {
+        let mut bit = 1;
+        for _ in 0..d {
+            if bit_slice[bit_idx] != 0 {
+                *elem |= bit;
+            }
+            bit_idx += 1;
+            bit <<= 1;
+        }
+    }
+    // We don't protect against values higher than Q, because it's an extra
+    // op and we're "supposed" never to get them.
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_byte_decode() {
+        let mut test_bytes: [u32; 256] = [14; 256];
+        test_bytes[0] = 596;
+        test_bytes[1] = 18345;
+        let mut test_bytes_mod_6 = test_bytes;
+        test_bytes_mod_6[0] = test_bytes[0] % (1 << 6);
+        test_bytes_mod_6[1] = test_bytes[1] % (1 << 6);
+
+        let mut test_bytes_mod_12 = test_bytes;
+        test_bytes_mod_12[0] = test_bytes[0] % Q;
+        test_bytes_mod_12[1] = test_bytes[1] % Q;
+        let encoded_6 = byte_encode(&test_bytes, 6).unwrap();
+        let encoded_12 = byte_encode(&test_bytes, 12).unwrap();
+        let decoded_6 = byte_decode(&encoded_6, 6).unwrap();
+        let decoded_12 = byte_decode(&encoded_12, 12).unwrap();
+        assert_eq!(decoded_6, test_bytes_mod_6);
+        assert_eq!(decoded_12, test_bytes_mod_12);
+    }
+
+    #[test]
+    fn test_byte_encode() {
+        {
+            let test_bytes: [u32; 256] = [0; 256];
+            let mut expected_result = Vec::<u8>::new();
+            for _ in 0..352 {
+                expected_result.push(0);
+            }
+            let enc_1 = byte_encode(&test_bytes, 11).unwrap();
+            assert_eq!(Bytes::from(expected_result), enc_1)
+        }
+        {
+            let mut test_bytes: [u32; 256] = [0; 256];
+            test_bytes[0] = 5963;
+            // 5963 mod 2048 = 1867. In hex, 11 bits 0x74B, backwards 0x4B7
+            let mut expected_result = Vec::<u8>::new();
+            expected_result.push(0x4B);
+            expected_result.push(0x07);
+            for _ in 0..350 {
+                expected_result.push(0);
+            }
+            let enc_1 = byte_encode(&test_bytes, 11).unwrap();
+            assert_eq!(Bytes::from(expected_result), enc_1)
+        }
+    }
 
     #[test]
     fn test_compress() {

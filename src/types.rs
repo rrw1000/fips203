@@ -9,6 +9,10 @@ use std::ops::Index;
 pub struct Bits(Vec<u8>);
 
 impl Bits {
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
     pub fn as_vec(&self) -> &Vec<u8> {
         &self.0
     }
@@ -50,14 +54,8 @@ impl From<Vec<u8>> for Bits {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Bytes(Vec<u8>);
-
-impl Default for Bytes {
-    fn default() -> Self {
-        Self(Vec::new())
-    }
-}
 
 impl Bytes {
     pub fn new() -> Self {
@@ -97,14 +95,8 @@ impl From<Vec<u8>> for Bytes {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bytes32([u8; 32]);
-
-impl Default for Bytes32 {
-    fn default() -> Self {
-        Self([0u8; 32])
-    }
-}
 
 impl Bytes32 {
     pub fn new(bytes: [u8; 32]) -> Self {
@@ -325,7 +317,7 @@ pub struct BitVectorIterator<'a> {
     index: usize,
 }
 
-impl<'a> Iterator for BitVectorIterator<'a> {
+impl Iterator for BitVectorIterator<'_> {
     type Item = bool;
 
     fn next(&mut self) -> Option<Self::Item> {
