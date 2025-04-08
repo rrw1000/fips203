@@ -1,7 +1,7 @@
 // Basic functions required by FIPS-203
 
-use crate::types::{Bytes, Bytes32, IntRange2To3};
-use anyhow::Result;
+use crate::types::{Bits, Bytes, Bytes32, IntRange2To3};
+use anyhow::{Result, anyhow};
 use sha3::{
     Digest, Sha3_256, Sha3_512, Shake256,
     digest::{ExtendableOutput, Update},
@@ -55,16 +55,46 @@ pub fn g(s: &Bytes) -> Result<(Bytes32, Bytes32)> {
     ))
 }
 
+/// S4 4.2.1
+pub fn bits_to_bytes(b: &Bits) -> Result<Bytes> {
+    if b.len() % 8 != 0 {
+        return Err(anyhow!(
+            "Attempt to give bits_to_bytes() a bitstring not an integer multiple of 8 long"
+        ));
+    }
+    let mut result = Vec::new();
+    let bit_vec = b.as_vec().as_slice();
+    let mut bitstring_idx = 0;
+    // Using for() loops here to give the compiler a bit more info.
+    for _ in 0..(b.len() / 8) {
+        let mut val: u8 = 0;
+        for bit_idx in 0..8 {
+            val |= bit_vec[bitstring_idx] << bit_idx;
+            bitstring_idx += 1;
+        }
+        result.push(val)
+    }
+    Ok(Bytes::from(result))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn test_bits_to_bytes() {
+        // 0x7081 - little endian bitstrings
+        let test_input = Bits::from_bitstring("1110000000011000").unwrap();
+        let expected_output = Bytes::from_hex("0718").unwrap();
+        assert_eq!(expected_output, bits_to_bytes(&test_input).unwrap());
+    }
+
+    #[test]
     fn test_g() {
         let test_input = Bytes::from_hex("a453b5addf93e22deecd1c263041aa6f").unwrap();
-        let expected_output =
-            Bytes::from_hex("1e967a12a311e816dfcfcae978aa908e2d83d03409047e9423440de6491d5048e8692661ed379ab44fd766cfd5185fd835a8d98e3e096e40a801d0d544025195")
-            .unwrap();
+        let expected_output = Bytes::from_hex(
+            "1e967a12a311e816dfcfcae978aa908e2d83d03409047e9423440de6491d5048e8692661ed379ab44fd766cfd5185fd835a8d98e3e096e40a801d0d544025195"
+        ).unwrap();
         let some_bytes = expected_output.as_bytes();
         let expect_left = Bytes32::try_from(&some_bytes[0..32]).unwrap();
         let expect_right = Bytes32::try_from(&some_bytes[32..64]).unwrap();

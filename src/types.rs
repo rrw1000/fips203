@@ -1,6 +1,48 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use hex;
 use std::fmt;
+use std::ops::Index;
+
+/// Represented like this because we want variable-sized bitfields to avoid having to specify the length
+/// in the type. We may change later..
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Bits(Vec<u8>);
+
+impl Bits {
+    pub fn as_vec(&self) -> &Vec<u8> {
+        &self.0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn as_vec_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.0
+    }
+
+    pub fn from_bitstring(bit_string: &str) -> Result<Self> {
+        let mut result = Vec::new();
+        // Hard without try_map()
+        for c in bit_string.chars() {
+            match c {
+                '0' => result.push(0),
+                '1' => result.push(1),
+                _ => {
+                    return Err(anyhow!(
+                        "Invalid bit string element '{:#02x}'",
+                        u32::from(c)
+                    ));
+                }
+            }
+        }
+        Ok(Self(result))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bytes(Vec<u8>);
@@ -28,10 +70,24 @@ impl Bytes {
         &self.0
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn from_hex(hex_string: &str) -> Result<Self> {
         let hex_string = hex_string.trim_start_matches("0x");
         let bytes = hex::decode(hex_string)?;
         Ok(Self(bytes))
+    }
+}
+
+impl From<Vec<u8>> for Bytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
     }
 }
 
@@ -70,17 +126,18 @@ impl Bytes32 {
         bytes.copy_from_slice(&decoded);
         Ok(Self(bytes))
     }
-    
+
     pub fn try_from(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != 32 {
             return Err(anyhow::anyhow!(
-                "Invalid byte slice length: expected 32 bytes, got {}", bytes.len()
+                "Invalid byte slice length: expected 32 bytes, got {}",
+                bytes.len()
             ));
         }
-        
+
         let mut array = [0u8; 32];
         array.copy_from_slice(bytes);
-        
+
         Ok(Self(array))
     }
 }
@@ -136,6 +193,149 @@ impl fmt::Display for IntRange2To3 {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BitVector {
+    // Underlying storage as bytes
+    data: Vec<u8>,
+}
+
+impl BitVector {
+    /// Create a new empty BitVector
+    pub fn new() -> Self {
+        Self { data: Vec::new() }
+    }
+
+    /// Create a BitVector with the specified number of bytes, initialized to 0
+    pub fn with_capacity_bytes(bytes: usize) -> Self {
+        Self {
+            data: vec![0; bytes],
+        }
+    }
+
+    /// Create a BitVector from an existing byte vector
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self { data: bytes }
+    }
+
+    /// Returns the number of bits in the vector (always a multiple of 8)
+    pub fn len(&self) -> usize {
+        self.data.len() * 8
+    }
+
+    /// Returns the number of bytes in the vector
+    pub fn byte_len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns true if the bit vector is empty
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    /// Get the bit at the specified index
+    pub fn get(&self, index: usize) -> Option<bool> {
+        if index >= self.len() {
+            return None;
+        }
+
+        let byte_index = index / 8;
+        let bit_index = index % 8;
+        let mask = 1 << bit_index;
+
+        Some((self.data[byte_index] & mask) != 0)
+    }
+
+    /// Set the bit at the specified index
+    pub fn set(&mut self, index: usize, value: bool) -> Result<()> {
+        if index >= self.len() {
+            return Err(anyhow::anyhow!(
+                "Index out of bounds: {} >= {}",
+                index,
+                self.len()
+            ));
+        }
+
+        let byte_index = index / 8;
+        let bit_index = index % 8;
+        let mask = 1 << bit_index;
+
+        if value {
+            self.data[byte_index] |= mask;
+        } else {
+            self.data[byte_index] &= !mask;
+        }
+
+        Ok(())
+    }
+
+    /// Get the underlying bytes
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Get a mutable reference to the underlying bytes
+    pub fn as_bytes_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.data
+    }
+
+    /// Count the number of bits set to 1
+    pub fn count_ones(&self) -> usize {
+        self.data
+            .iter()
+            .map(|&byte| byte.count_ones() as usize)
+            .sum()
+    }
+
+    /// Creates an iterator over the bits
+    pub fn iter(&self) -> BitVectorIterator {
+        BitVectorIterator {
+            bitvector: self,
+            index: 0,
+        }
+    }
+}
+
+impl Default for BitVector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Index<usize> for BitVector {
+    type Output = bool;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        if self.get(index).unwrap_or(false) {
+            &true
+        } else {
+            &false
+        }
+    }
+}
+
+/// Iterator over the bits in a BitVector
+pub struct BitVectorIterator<'a> {
+    bitvector: &'a BitVector,
+    index: usize,
+}
+
+impl<'a> Iterator for BitVectorIterator<'a> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.bitvector.get(self.index);
+        if result.is_some() {
+            self.index += 1;
+        }
+        result
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.bitvector.len().saturating_sub(self.index);
+        (remaining, Some(remaining))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,38 +376,102 @@ mod tests {
         let result = Bytes32::from_hex("deadbeef");
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_bytes32_try_from() {
         // Test valid 32-byte array
         let bytes: Vec<u8> = (0..32).collect();
         let result = Bytes32::try_from(&bytes).unwrap();
-        
+
         let expected: [u8; 32] = [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
             24, 25, 26, 27, 28, 29, 30, 31,
         ];
         assert_eq!(result.as_bytes(), &expected);
-        
+
         // Test invalid length
         let short_bytes = vec![0; 16];
         let result = Bytes32::try_from(&short_bytes);
         assert!(result.is_err());
-        
+
         let long_bytes = vec![0; 64];
         let result = Bytes32::try_from(&long_bytes);
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_defaults() {
         // Test Bytes default
         let default_bytes = Bytes::default();
         assert_eq!(default_bytes.as_bytes().len(), 0);
-        
+
         // Test Bytes32 default
         let default_bytes32 = Bytes32::default();
         let all_zeros = [0u8; 32];
         assert_eq!(default_bytes32.as_bytes(), &all_zeros);
+    }
+
+    #[test]
+    fn test_bit_vector() {
+        // Test creation
+        let mut bv = BitVector::with_capacity_bytes(3); // 3 bytes = 24 bits
+        assert_eq!(bv.len(), 24);
+        assert_eq!(bv.byte_len(), 3);
+        assert_eq!(bv.as_bytes().len(), 3);
+
+        // Test setting and getting bits
+        for i in 0..24 {
+            assert_eq!(bv.get(i), Some(false));
+            if i % 2 == 0 {
+                bv.set(i, true).unwrap();
+            }
+        }
+
+        for i in 0..24 {
+            assert_eq!(bv.get(i), Some(i % 2 == 0));
+        }
+
+        // Test count_ones
+        assert_eq!(bv.count_ones(), 12); // 12 bits set to 1
+
+        // Test out of bounds
+        assert_eq!(bv.get(24), None);
+        assert!(bv.set(24, true).is_err());
+
+        // Test from_bytes
+        let data = vec![0b10101010, 0b01010101];
+        let bv2 = BitVector::from_bytes(data);
+        assert_eq!(bv2.len(), 16);
+        assert_eq!(bv2.byte_len(), 2);
+
+        // First byte (10101010) should have bits 0,2,4,6 set
+        assert_eq!(bv2.get(0), Some(false));
+        assert_eq!(bv2.get(1), Some(true));
+        assert_eq!(bv2.get(2), Some(false));
+        assert_eq!(bv2.get(3), Some(true));
+        assert_eq!(bv2.get(4), Some(false));
+        assert_eq!(bv2.get(5), Some(true));
+        assert_eq!(bv2.get(6), Some(false));
+        assert_eq!(bv2.get(7), Some(true));
+
+        // Second byte (01010101) should have bits 8,10,12,14 set
+        assert_eq!(bv2.get(8), Some(true));
+        assert_eq!(bv2.get(9), Some(false));
+        assert_eq!(bv2.get(10), Some(true));
+        assert_eq!(bv2.get(11), Some(false));
+        assert_eq!(bv2.get(12), Some(true));
+        assert_eq!(bv2.get(13), Some(false));
+        assert_eq!(bv2.get(14), Some(true));
+        assert_eq!(bv2.get(15), Some(false));
+
+        // Test iteration
+        let iter_values: Vec<bool> = bv2.iter().collect();
+        assert_eq!(iter_values.len(), 16);
+        assert_eq!(iter_values[0], false);
+        assert_eq!(iter_values[1], true);
+
+        // Test IndexMut
+        assert_eq!(bv2[0], false);
+        assert_eq!(bv2[1], true);
     }
 }
