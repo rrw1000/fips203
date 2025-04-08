@@ -44,6 +44,12 @@ impl Bits {
     }
 }
 
+impl From<Vec<u8>> for Bits {
+    fn from(bits: Vec<u8>) -> Self {
+        Self(bits)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bytes(Vec<u8>);
 

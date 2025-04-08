@@ -77,6 +77,19 @@ pub fn bits_to_bytes(b: &Bits) -> Result<Bytes> {
     Ok(Bytes::from(result))
 }
 
+/// S4 4.2.1
+pub fn bytes_to_bits(b: &Bytes) -> Result<Bits> {
+    let mut result: Vec<u8> = Vec::new();
+    b.as_vec().iter().for_each(|x| {
+        let mut val = *x;
+        for _ in 0..8 {
+            result.push(val & 1);
+            val >>= 1;
+        }
+    });
+    Ok(Bits::from(result))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +100,13 @@ mod tests {
         let test_input = Bits::from_bitstring("1110000000011000").unwrap();
         let expected_output = Bytes::from_hex("0718").unwrap();
         assert_eq!(expected_output, bits_to_bytes(&test_input).unwrap());
+    }
+
+    #[test]
+    fn test_bytes_to_bits() {
+        let expected_output = Bits::from_bitstring("0100111101101001").unwrap();
+        let test_input = Bytes::from_hex("f296").unwrap();
+        assert_eq!(expected_output, bytes_to_bits(&test_input).unwrap());
     }
 
     #[test]
