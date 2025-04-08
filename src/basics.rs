@@ -90,9 +90,42 @@ pub fn bytes_to_bits(b: &Bytes) -> Result<Bits> {
     Ok(Bits::from(result))
 }
 
+const Q: u32 = 3329;
+
+/// S4 4.2.1 - recall that we're told q = 3329 and bit len(q) == 12
+/// This means we can get away with this - there are probably more
+/// elegant ways, but..
+pub fn compress(x: u32, d: u8) -> u32 {
+    // This is fine, because log_2 3329 < 13, d is at most 12, and 13+12 < 31
+    // Do an extra shift left, then add 1 to get the rounding, then shift right.
+    let num = (((x << (d + 1)) / Q) + 1) >> 1;
+    // We hope the compiler is bright enough to turn this into a mask op.
+    num % (1 << d)
+}
+
+/// S4 4.2.1
+pub fn decompress(y: u32, d: u8) -> u32 {
+    // Same trick again for rounding
+    ((((Q << 1) * y) / (1 << d)) + 1) >> 1
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_compress() {
+        // Test data worked out via speedcrunch from the spec.
+        assert_eq!(compress(144, 10), 44);
+        assert_eq!(compress(2367, 6), 46);
+    }
+
+    #[test]
+    fn test_decompress() {
+        assert_eq!(decompress(1410, 6), 73342);
+        assert_eq!(decompress(44, 10), 143);
+        assert_eq!(decompress(46, 6), 2393);
+    }
 
     #[test]
     fn test_bits_to_bytes() {
