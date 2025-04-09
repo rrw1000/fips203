@@ -7,6 +7,51 @@ use sha3::{
     digest::{ExtendableOutput, Update},
 };
 
+pub const Q: u32 = 3329;
+pub const Z: u32 = 17;
+
+/// The very specific operation x = Z^Bitrev(i) mod Q.
+/// Observe that Z^Bitrev(i) mod Q = (Z^(2^0) mod Q + Z^(2^1) mod Q ..) mod Q and that Q^2 < u32::max()
+/// We could type the table in the spec in, but that would involve a lot of tedious typing..
+/// @todo Compute zeta_mod in build.rs
+pub fn zeta_mod(i: u32) -> u32 {
+    // A table of Z^(2^i) - you could get away with a much smaller table by
+    // recomputing, but this is just as easy.
+    // We index backwards to achieve the bitrev() part of our spec.
+    const Z_2_I_MOD_Q: [u32; 8] = [
+        3328, // 17^128 mod Q
+        1729, // 17^64 mod Q
+        2580, // 17^32 mod Q
+        2642, // 17^16 mod Q
+        1062, // 17^8 mod Q
+        296,  // 17^4 mod Q
+        289,  // 17^2 mod Q
+        17,   // 17^1 mod Q
+    ];
+    // This could be quite efficiently vectorised using dot product and bitrev(), but since
+    // we don't have these here ..
+    let mut sum: u32 = 1;
+    for (bit, val) in Z_2_I_MOD_Q.iter().enumerate() {
+        if (i >> bit) & 1 != 0 {
+            sum = (sum * val) % Q;
+        }
+    }
+    sum % Q
+}
+
+/// Subtract and modulus
+/// The comment in alg 8 suggests that mod is defined wrapped here - ie. 2-3 mod 5 = 4, not 1, because 2-3+4 = 5.
+/// Luckily the two definitions are identical for +ve numbers - it's only when you have -ves turning up that
+/// the difference is perceptible and you need this function to get the answer that (I think) the spec is looking for.
+/// Computes a-b mod n
+pub fn sub_mod(a: u32, b: u32, n: u32) -> u32 {
+    if a < b {
+        n - (a.abs_diff(b) % n)
+    } else {
+        a.abs_diff(b) % n
+    }
+}
+
 /// S4.1 PRF
 pub fn prf(n: IntRange2To3, s: &Bytes32, b: &Bytes) -> Bytes {
     let mut hasher = Shake256::default();
@@ -89,8 +134,6 @@ pub fn bytes_to_bits(b: &Bytes) -> Result<Bits> {
     });
     Ok(Bits::from(result))
 }
-
-const Q: u32 = 3329;
 
 /// S4 4.2.1 - recall that we're told q = 3329 and bit len(q) == 12
 /// This means we can get away with this - there are probably more
@@ -291,5 +334,24 @@ mod tests {
                                      a5f5f29f8b9bd6df2b76ea3d2474eb2f4fe7806091301eb93622cd32493a2d450409262010bf35799306b959695\
                                      d59b83d6d01022c568db1").unwrap();
         assert_eq!(cmp_3, result_3);
+    }
+
+    #[test]
+    fn test_sub_mod() {
+        assert_eq!(sub_mod(0, 0, 5), 0);
+        assert_eq!(sub_mod(3, 2, 5), 1);
+        assert_eq!(sub_mod(2, 3, 5), 4);
+        assert_eq!(sub_mod(297, 1486, 5), 1);
+    }
+
+    #[test]
+    fn test_zeta_mod() {
+        // These values computed by python..
+        // Z^1 mod Q
+        assert_eq!(zeta_mod(128), 17);
+        // Z^219 mod Q (0xdb, which is a binary palindrome)
+        assert_eq!(zeta_mod(219), 2768);
+        // Z^0x7a , bitrev = 0x5e
+        assert_eq!(zeta_mod(0x5e), 1915);
     }
 }

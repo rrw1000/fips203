@@ -1,7 +1,39 @@
 use anyhow::{Result, anyhow};
 use hex;
-use std::fmt;
+use sha3::{
+    Shake128, Shake128Reader,
+    digest::{ExtendableOutput, Update},
+};
+use std::iter::Iterator;
 use std::ops::Index;
+use std::{fmt, io::Read};
+
+pub struct XOF(Shake128);
+
+impl XOF {
+    // Named for the function in the standard.
+    pub fn init() -> Self {
+        Self(Shake128::default())
+    }
+
+    pub fn absorb_bytes(&mut self, b: &Bytes) {
+        self.0.update(b.as_bytes());
+    }
+
+    pub fn absorb_slice(&mut self, b: &[u8]) {
+        self.0.update(b);
+    }
+
+    pub fn finalize_xof(&mut self) -> Shake128Reader {
+        self.0.clone().finalize_xof()
+    }
+
+    pub fn squeeze(rdr: &mut Shake128Reader, l: usize) -> Result<Bytes> {
+        let mut rv = vec![0; l];
+        rdr.read_exact(rv.as_mut_slice())?;
+        Ok(Bytes::from(rv))
+    }
+}
 
 /// Represented like this because we want variable-sized bitfields to avoid having to specify the length
 /// in the type. We may change later..
