@@ -10,7 +10,7 @@ pub fn ntt(f: &[u32; 256]) -> Result<[u32; 256]> {
             let zeta = basics::zeta_mod(i);
             i += 1;
             for j in start..(start + len) {
-                // @todo can probably remove some of the mods here, but log_2 Q = 24, so not many.
+                // @todo can probably remove some of the mods here, but 2 log_2 Q = 24, so not many.
                 let t = (zeta * f_hat[j + len]) % basics::Q;
                 f_hat[j + len] = basics::sub_mod(f_hat[j], t, basics::Q);
                 f_hat[j] = (f_hat[j] + t) % basics::Q;
