@@ -94,6 +94,18 @@ impl Bytes {
         Self(Vec::new())
     }
 
+    pub fn accumulate_32(&mut self, other: Bytes32) {
+        self.0.extend(other.as_bytes())
+    }
+    
+    pub fn accumulate(&mut self, other: Bytes) {
+        self.0.extend(other.as_bytes())
+    }
+
+    pub fn as_vec_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.0
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Self {
         Self(Vec::from(bytes))
     }

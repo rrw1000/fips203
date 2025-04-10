@@ -1,6 +1,5 @@
-use crate::{basics, ntt, types};
+use crate::basics;
 use anyhow::Result;
-use rand::{Rng, SeedableRng};
 
 fn base_case_multiply(a: (u32, u32), b: (u32, u32), gamma: u32) -> (u32, u32) {
     // this is all mod Q, so we need to reduce every two multiplies,
@@ -29,6 +28,7 @@ pub fn multiply_ntts(f_bar: [u32; 256], g_bar: [u32; 256]) -> Result<[u32; 256]>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{Rng, SeedableRng};
 
     #[test]
     fn test_base_case_multiply() {

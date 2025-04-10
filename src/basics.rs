@@ -10,6 +10,12 @@ use sha3::{
 pub const Q: u32 = 3329;
 pub const Z: u32 = 17;
 
+pub fn accumulate_vec(a: &mut [u32; 256], b: &[u32; 256]) {
+    for idx in 0..256 {
+        a[idx] = (a[idx] + b[idx]) % Q
+    }
+}
+
 /// Z^(2*BitRev7(i) + 1) mod Q
 /// == Z^BitRev7(i) * Z^BitRev7(i) * Z
 /// log_2 Q = 12, so size of the result is max 24 + 5 = 29 bits and we can afford to reduce only once.
@@ -61,10 +67,10 @@ pub fn sub_mod(a: u32, b: u32, n: u32) -> u32 {
 }
 
 /// S4.1 PRF
-pub fn prf(n: IntRange2To3, s: &Bytes32, b: &Bytes) -> Bytes {
+pub fn prf(n: IntRange2To3, s: &Bytes32, b: u8) -> Bytes {
     let mut hasher = Shake256::default();
     hasher.update(s.as_bytes());
-    hasher.update(b.as_bytes());
+    hasher.update(&[b]);
     // 8 * 64 * n bits = 64*2 or 64*3
     match n {
         IntRange2To3::Two => {
@@ -322,25 +328,20 @@ mod tests {
         let test32 =
             Bytes32::from_hex("b721ec76c0a4fc36969438de2908446f4e189f47f286411b109e8cda786d07d1")
                 .unwrap();
-        let testrest = Bytes::from_hex("227bf570a667ba06").unwrap();
-        let result_2 = prf(IntRange2To3::Two, &test32, &testrest);
+        let result_2 = prf(IntRange2To3::Two, &test32, 0x78);
         let cmp_2 = Bytes::from_hex(
-            "fc4a955618bf042cbfd736ba057053bdd1e5ec9f4394f92df5a38d30b4739ffd595c234a32f523fee38f77eb4\
-                                     7f905ca308f921c567346a65a4642076c89444813b4b97aee2e44206a9da37be3431b1a076c6da2127bbab08c\
-                                     0ab40171cde70f4e5352d2653a08bc94cce2e34860d156f8411be7431c0c81fb9d2fb3b55ccf1a",
+            "291f9389b72dffdab2ee42d4d28f960d3532b4ae78d3a7324fa428ae5896ec46f1c1f1967c7a14d67d06501b7167fa81fc8a9\
+             ccaaaa2c93a2a973648e46dc363125ab579d15a9dc0b86f9f1eb47da73b4298b5e06785db53ae607b4a66f9c68464832e0db5\
+             cca8ed2146f7b6694f0f6390a6429b2468549c5ee1036e119eb0e3"
         ).unwrap();
         assert_eq!(cmp_2, result_2);
 
-        let result_3 = prf(
-            IntRange2To3::Three,
-            &test32,
-            &Bytes::from_hex("b5fa31cdaebbf967bf").unwrap(),
-        );
-        let cmp_3 = Bytes::from_hex("fdbf1b1c2e74aed711cbb3e4f1c4728b846250a6e5c5b2dfb935526d5991e602f9d0b3447fbecd51c7f2199592\
-                                     464dad15319885e157d6446366ba4d4ff5fc2ab3aa9e3a126ffc5b256df35edcc16e228b9a718bf6ec3fa7317f4\
-                                     153db9911dee230158cf50119e9d7f262f3572fdb6e0913c45fb63bd2176a12f849b977759bc2d09768199126db\
-                                     a5f5f29f8b9bd6df2b76ea3d2474eb2f4fe7806091301eb93622cd32493a2d450409262010bf35799306b959695\
-                                     d59b83d6d01022c568db1").unwrap();
+        let result_3 = prf(IntRange2To3::Three, &test32, 0x40);
+        let cmp_3 = Bytes::from_hex("dd2b2ffec4eb0e21ab994c3c6a4f45e10975688927fdbeaac224ce3e94b4719c18451e29ecabd25\
+                                     6a6fdc7d2731f595f67105d35bfdc9cf4ebc9a21ac5d4054812256b3d73587a9df1dabd14ceeef7\
+                                     cc45a3e052e89839e3e6fc352c01852da6972e3de3bd871db12121bac870bb0219c82a6828c9dfc\
+                                     577a274771d795e2a134f4b2c12253a035496cd06070eee9ae927360a53b228312b5914febd10206\
+                                     4fce6d279cf18db2fb4cb63d82138bb0ea69d8e9da513cbc98689a877a195b323b1").unwrap();
         assert_eq!(cmp_3, result_3);
     }
 
@@ -369,5 +370,30 @@ mod tests {
         assert_eq!(zeta_2(128), 1584);
         assert_eq!(zeta_2(219), 554);
         assert_eq!(zeta_2(0x5e), 642);
+    }
+
+    #[test]
+    fn test_accumulate_vec() {
+        let mut a: [u32; 256] = [12; 256];
+        let mut b: [u32; 256] = [1; 256];
+        b[3] = 47;
+        b[255] = 2700;
+        accumulate_vec(&mut a, &b);
+        accumulate_vec(&mut a, &b);
+        let expected_a: [u32; 256] = [
+            14, 14, 14, 106, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+            14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 2083,
+        ];
+        assert_eq!(expected_a, a);
     }
 }
