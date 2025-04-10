@@ -10,6 +10,14 @@ use sha3::{
 pub const Q: u32 = 3329;
 pub const Z: u32 = 17;
 
+/// Z^(2*BitRev7(i) + 1) mod Q
+/// == Z^BitRev7(i) * Z^BitRev7(i) * Z
+/// log_2 Q = 12, so size of the result is max 24 + 5 = 29 bits and we can afford to reduce only once.
+pub fn zeta_2(i: u32) -> u32 {
+    let z = zeta_mod(i);
+    (z * z * Z) % Q
+}
+
 /// The very specific operation x = Z^Bitrev(i) mod Q.
 /// Observe that Z^Bitrev(i) mod Q = (Z^(2^0) mod Q + Z^(2^1) mod Q ..) mod Q and that Q^2 < u32::max()
 /// We could type the table in the spec in, but that would involve a lot of tedious typing..
@@ -353,5 +361,13 @@ mod tests {
         assert_eq!(zeta_mod(219), 2768);
         // Z^0x7a , bitrev = 0x5e
         assert_eq!(zeta_mod(0x5e), 1915);
+    }
+
+    #[test]
+    fn test_zeta_2() {
+        // 17^3 % Q
+        assert_eq!(zeta_2(128), 1584);
+        assert_eq!(zeta_2(219), 554);
+        assert_eq!(zeta_2(0x5e), 642);
     }
 }
