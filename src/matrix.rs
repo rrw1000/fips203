@@ -1,7 +1,7 @@
 use crate::{basics, mul, ntt};
 use anyhow::{Result, anyhow};
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Vector {
     values: [[u32; 256]; 4],
     dimension: u32,
@@ -77,7 +77,7 @@ impl Vector {
 
 // Because vectors are slow(er), we always store the maximum size matrix (4x4), and
 // just use the upper elements for smaller values of k.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SquareMatrix {
     values: [[u32; 256]; 16],
     dimension: u32,

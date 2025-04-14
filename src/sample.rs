@@ -23,8 +23,8 @@ pub fn sample_ntt(b: &Bytes) -> Result<[u32; 256]> {
         let c0: u32 = c[0].into();
         let c1: u32 = c[1].into();
         let c2: u32 = c[2].into();
-        let d1: u32 = c0 + 256 * (c1 % 16);
-        let d2: u32 = (c1 / 16) + 16 * c2;
+        let d1: u32 = c0 + (256 * (c1 % 16));
+        let d2: u32 = (c1 / 16) + (16 * c2);
         if d1 < basics::Q {
             rv[j] = d1;
             j += 1;

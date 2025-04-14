@@ -8,6 +8,7 @@ pub fn ntt(f: &[u32; 256]) -> Result<[u32; 256]> {
         let len = 1 << len_bit;
         for start in (0..256).step_by(2 * len) {
             let zeta = basics::zeta_mod(i);
+            println!("zeta[{i}] = {zeta}");
             i += 1;
             for j in start..(start + len) {
                 // @todo can probably remove some of the mods here, but 2 log_2 Q = 24, so not many.

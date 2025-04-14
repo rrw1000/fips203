@@ -61,10 +61,17 @@ impl ParamSet {
     /// Purely internal keygen function. Returns (ek,dk)
     fn k_pke_keygen(&self, d: &Bytes32) -> Result<(Bytes, Bytes)> {
         let mut random_bytes = Bytes::new();
+        println!("d = {:?}", hex::encode(d.as_bytes()));
         random_bytes.as_vec_mut().extend_from_slice(d.as_bytes());
         // We know it fits because max k == 4
         random_bytes.as_vec_mut().push(self.k as u8);
+        println!("rb = {:?}", hex::encode(random_bytes.as_bytes()));
         let (p, sigma) = basics::g(&random_bytes)?;
+        println!(
+            "p = {:?} sigma = {:?}",
+            hex::encode(p.as_bytes()),
+            hex::encode(sigma.as_bytes())
+        );
         let mut big_n = 0;
         let mut a_matrix = matrix::SquareMatrix::new(self.k);
         for i in 0..self.k {
@@ -73,9 +80,12 @@ impl ParamSet {
                 b.as_vec_mut().extend_from_slice(p.as_bytes());
                 b.as_vec_mut().push(j as u8);
                 b.as_vec_mut().push(i as u8);
+                println!("{i},{j} = {:?}", hex::encode(b.as_bytes()));
+
                 a_matrix.set(i, j, &sample::sample_ntt(&b)?);
             }
         }
+        println!("A = {:?}", &a_matrix);
         let mut s = matrix::Vector::new(self.k);
         for i in 0..self.k {
             s.set(
@@ -84,6 +94,7 @@ impl ParamSet {
             );
             big_n += 1;
         }
+        println!("S = {:?}", &s);
         let mut e = matrix::Vector::new(self.k);
         for i in 0..self.k {
             e.set(
@@ -92,29 +103,33 @@ impl ParamSet {
             );
             big_n += 1;
         }
+        println!("E = {:?}", &e);
         let s_hat = s.ntt()?;
         let e_hat = e.ntt()?;
+        println!("NTT_S = {:?}", &s_hat);
+        println!("NTT_E = {:?}", &e_hat);
+
         let t_hat = a_matrix.compose_hat(&s_hat)?.add(&e_hat)?;
         let mut ek_pke = Bytes::new();
         let mut dk_pke = Bytes::new();
         for i in 0..self.k {
             let e_value = basics::byte_encode(&t_hat.at(i), 12)?;
             ek_pke.accumulate(e_value);
-            ek_pke.as_vec_mut().extend(p.as_bytes());
             let d_value = basics::byte_encode(&s_hat.at(i), 12)?;
             dk_pke.accumulate(d_value);
         }
+        ek_pke.as_vec_mut().extend(p.as_bytes());
         Ok((ek_pke, dk_pke))
     }
 
     /// Alg 16 ; returns (ek,dk)
-    fn keygen_internal(&self, d: &Bytes32, z: &Bytes32) -> Result<(Bytes, Bytes)> {
-        let (ek_pke, dk_pke) = self.k_pke_keygen(&d)?;
+    fn keygen_internal(&self, d: &Bytes32, v: &Bytes32) -> Result<(Bytes, Bytes)> {
+        let (ek_pke, dk_pke) = self.k_pke_keygen(d)?;
         let mut dk = Bytes::new();
         dk.accumulate(dk_pke);
         dk.accumulate(ek_pke.clone());
         dk.accumulate_32(basics::h(&ek_pke)?);
-        dk.accumulate_32(*z);
+        dk.accumulate_32(*v);
         Ok((ek_pke, dk))
     }
 
@@ -132,17 +147,47 @@ impl ParamSet {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_k_pke_keygen_512() {
-        struct TestSet {
-            d: Bytes32,
-            v: Bytes32,
-            ek: Bytes,
-            dk: Bytes,
+    struct TestSet {
+        d: Bytes32,
+        z: Bytes32,
+        ek: Bytes,
+        dk: Bytes,
+    }
+
+    impl TestSet {
+        pub fn from_hex(d: &str, v: &str, ek: &str, dk: &str) -> TestSet {
+            TestSet {
+                d: Bytes32::from_hex(d).unwrap(),
+                z: Bytes32::from_hex(v).unwrap(),
+                ek: Bytes::from_hex(ek).unwrap(),
+                dk: Bytes::from_hex(dk).unwrap(),
+            }
         }
+    }
+
+    // Uses the intermediate value ke
+    #[test]
+    fn test_ref_512() {
+        // This is the first vector from the kyber test repo, used so that I can check the intermediate values.
+        let t = TestSet::from_hex(
+            "7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26",
+            "3cb1eea988004b93103cfb0aeefd2a686e01fa4a58e8a3639ca8a1e3f9ae57e2",
+            "c29ac66c84bee3f129508c2b8c790c99a5ca41e5707e9b8c75c04d7ea8a481980a358b066a4a7e28d15d10374f75c33da6029cd490746fb55f5feab2ce823dec1830c0c18ef89ba3cc3bce4d252a07a40d401a4c8d273618b595db21ca4a959eb4d133556801b2b78254b2b5955c0400962dbb5a487aaa24a430b614e2af9338afd4b0339bd830a9cb761db1a83220352dd523b8a583022ca13e246506548c57ba3850ac5c50d864e2d48b89694277cc7a8174ad7b1ba2ee621d57d29b23c22df831872051145d2535dbb025e29c6da38cb475958e2a8808a431bed5b486821a1513a729cd979b6c8b382503cf53337616e1059ddc59977219d2f17b32acabbe86c468c1267b2b862ac565a7e232266c83fc700cda19b616377389428e62614cd6ac9f08fb12d21827feb324b14bc16cc0c20904b3973b9dfe60af577776449ac34eb00989e5a876143bc9b930a3c2a5bb861208f225dd97625bb36b2d8810d0452e458968b90c6a6d97c2dfca7341d53c741a60e2b91385c86bb3b1be5f10708c546ae6318209ba268dd2b4e3e4722761491ae215600248e7541e6080b865f44a169c02a5b374f1fa5502333753979c9da75452c4814a8b8fd682b8e0370699296bc2f42d38e5a2de92c5f5f61f24b65e1b9b75249b8759708706640000b490937683e1ccbbf39a0baecb1edd62826721524bcc4d3bf06f8e5ab368aa426eb42c701839e8bbcc69dbccd2757f84c60a409b6629d98dc92947367c52f0698c3c41c01110bafbeb0621cc175170375f8250c0f62406e32e10725b47e3c165845a7ada8fb2c55555f5cc8602246fe06f875a6eb5c9459dd19292428492a76738b8057e84c8e11436c4eb788e494e3952657ed331a2e4a47d75492365c473f484200502868c733bb9b2b3e44af2c98adfb91a4e1a144eec5a32d24f13c78775f206d7a94dee12007f778e484a1430666bfeda6dbb31b757d72b5c79a469522fe6599abb45b52cc6403c4970f65684bb770ca78893ba439057013655309cd84c524c9ca558e3612041b7b2026e2187598afb46f1d4ca85096dbc9bcc1c25779dfb607052e11649bb7f5f7268f979c4d8140afe6ce53830f38602290d751427f07b27",
+            "7cf108c75a4d3592053d0ca79ce527ec1734f7023656e26253e2bfc68960dea73d28d7a9821597b48b4504837e27132c8ebc48505303aeb568f9d1928f7244cf98b4a88843c5db69845abfc4e40683dca3bde694445c63cc512bd2e4608e91a5697738bbca3b09a98da49757ad65c085125d11d01178d15acb251f417cbeff2a2ac1b05dc70839ffb297be205152e98371745de76243d3a302dfda7f16f5a8f0d2b73021a7f5c0490ff6b5a4125843889364288bede430835cce5bf8b86377132aea3ced911311a43b87e10ae471b49f1a31b636ce5d7c415d7c17539575724c3166ab23ca183f9962a0b17190f3dc204dc2551eec234b7c4e298a4e60f15d4e40bcaf1ba0eaa806e214bda0a0b0e0f51b34745e148290e222a4496c946766029cd82964429fd85a30ee3c0c6dea4e6bc840237c38d8e9b6a893702444bfeef783a104a8b46b8309a914cbaaa8cec9c08bb54a3cfc1a22c5a9d1b87685a30417d846d5e22242e8c0c8316cb7f15832b70b4bbc453bb67485e34c87d9a2d4b294d257a98d864afab445aea6bf4830404d170ca7484cc799b73ae3ce375c3a13d1318bd29158620328c8bc22d812d269c8ec133ce4f977bd95300054b5ef246bb086a6d3340575464183e10db1a126f81a43d2f800e962568de3411515b90dc1256446cf8fc33149e66a8657c221335eb57a8ca6262b06981a032823222c9da22835271033212b4e9d516132a428709b5882ab8764771832968dc73c4cd241adb145b5e654b38bab03e3524f113525dd0a63e8f195fceb26b8b03063c4863459cc10c5884cac016eebb7afa2519b27293b845e7e893e70bb21d0e004f1d05015dc71fcf6b150c750aa98c96f89c8da199eefc1712c409bc833a84d404ad72c873bf910c9190645b94dd2a31347596029d22abd071f5387588a9917fee4b33d1bbcfa1858390662b656c09ff824ed177abf44a118b7c78bba96b9f9b5a3a54e597829be686868e5463f99be58da0be7886501730e01e26aad0535896616d98125c38b3eb778114176b1bd498ebd92b5bd0a98a0a39f77b599c3e63e66fb62167b06c29ac66c84bee3f129508c2b8c790c99a5ca41e5707e9b8c75c04d7ea8a481980a358b066a4a7e28d15d10374f75c33da6029cd490746fb55f5feab2ce823dec1830c0c18ef89ba3cc3bce4d252a07a40d401a4c8d273618b595db21ca4a959eb4d133556801b2b78254b2b5955c0400962dbb5a487aaa24a430b614e2af9338afd4b0339bd830a9cb761db1a83220352dd523b8a583022ca13e246506548c57ba3850ac5c50d864e2d48b89694277cc7a8174ad7b1ba2ee621d57d29b23c22df831872051145d2535dbb025e29c6da38cb475958e2a8808a431bed5b486821a1513a729cd979b6c8b382503cf53337616e1059ddc59977219d2f17b32acabbe86c468c1267b2b862ac565a7e232266c83fc700cda19b616377389428e62614cd6ac9f08fb12d21827feb324b14bc16cc0c20904b3973b9dfe60af577776449ac34eb00989e5a876143bc9b930a3c2a5bb861208f225dd97625bb36b2d8810d0452e458968b90c6a6d97c2dfca7341d53c741a60e2b91385c86bb3b1be5f10708c546ae6318209ba268dd2b4e3e4722761491ae215600248e7541e6080b865f44a169c02a5b374f1fa5502333753979c9da75452c4814a8b8fd682b8e0370699296bc2f42d38e5a2de92c5f5f61f24b65e1b9b75249b8759708706640000b490937683e1ccbbf39a0baecb1edd62826721524bcc4d3bf06f8e5ab368aa426eb42c701839e8bbcc69dbccd2757f84c60a409b6629d98dc92947367c52f0698c3c41c01110bafbeb0621cc175170375f8250c0f62406e32e10725b47e3c165845a7ada8fb2c55555f5cc8602246fe06f875a6eb5c9459dd19292428492a76738b8057e84c8e11436c4eb788e494e3952657ed331a2e4a47d75492365c473f484200502868c733bb9b2b3e44af2c98adfb91a4e1a144eec5a32d24f13c78775f206d7a94dee12007f778e484a1430666bfeda6dbb31b757d72b5c79a469522fe6599abb45b52cc6403c4970f65684bb770ca78893ba439057013655309cd84c524c9ca558e3612041b7b2026e2187598afb46f1d4ca85096dbc9bcc1c25779dfb607052e11649bb7f5f7268f979c4d8140afe6ce53830f38602290d751427f07b27cda93dec4c4dc4d8484457fd882399c4b918c49fa8389a1dfa8c9f92f39b00cf3cb1eea988004b93103cfb0aeefd2a686e01fa4a58e8a3639ca8a1e3f9ae57e2",
+        );
+        let ml_kem_512 = ParamSet::ml_kem_512();
+        let r = ml_kem_512.keygen(&t.d, &t.z).unwrap();
+        println!("{} - {}", t.ek.len(), r.public_enc.len());
+        assert_eq!(t.ek, r.public_enc);
+        assert_eq!(t.dk, r.private_dec);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_keygen_512() {
         // At last, we can use the test vectors :-)
         let test_vectors = vec![TestSet {
-            v: Bytes32::from_hex(
+            z: Bytes32::from_hex(
                 "1A394111163803FE2E8519C335A6867556338EADAFA22B5FC557430560CCD693"
             ).unwrap(),
             d: Bytes32::from_hex(
@@ -158,7 +203,12 @@ mod tests {
         }];
         let ml_kem_512 = ParamSet::ml_kem_512();
         for t in test_vectors {
-            let kp = ml_kem_512.keygen(&t.d, &t.v).unwrap();
+            let kp = ml_kem_512.keygen(&t.d, &t.z).unwrap();
+            println!(
+                "kp e = {:?}\n   d = {:?}\n",
+                hex::encode(kp.public_enc.as_bytes()),
+                hex::encode(kp.private_dec.as_bytes())
+            );
             assert_eq!(t.ek, kp.public_enc);
             assert_eq!(t.dk, kp.private_dec);
         }

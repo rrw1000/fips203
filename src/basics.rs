@@ -32,8 +32,7 @@ pub fn zeta_mod(i: u32) -> u32 {
     // A table of Z^(2^i) - you could get away with a much smaller table by
     // recomputing, but this is just as easy.
     // We index backwards to achieve the bitrev() part of our spec.
-    const Z_2_I_MOD_Q: [u32; 8] = [
-        3328, // 17^128 mod Q
+    const Z_2_I_MOD_Q: [u32; 7] = [
         1729, // 17^64 mod Q
         2580, // 17^32 mod Q
         2642, // 17^16 mod Q
@@ -357,19 +356,19 @@ mod tests {
     fn test_zeta_mod() {
         // These values computed by python..
         // Z^1 mod Q
-        assert_eq!(zeta_mod(128), 17);
+        assert_eq!(zeta_mod(2), 2580);
         // Z^219 mod Q (0xdb, which is a binary palindrome)
-        assert_eq!(zeta_mod(219), 2768);
+        assert_eq!(zeta_mod(3), 3289);
         // Z^0x7a , bitrev = 0x5e
-        assert_eq!(zeta_mod(0x5e), 1915);
+        assert_eq!(zeta_mod(6), 1897);
     }
 
     #[test]
     fn test_zeta_2() {
         // 17^3 % Q
-        assert_eq!(zeta_2(128), 1584);
-        assert_eq!(zeta_2(219), 554);
-        assert_eq!(zeta_2(0x5e), 642);
+        assert_eq!(zeta_2(1), Q - 17);
+        assert_eq!(zeta_2(8), 1637);
+        assert_eq!(zeta_2(26), 2156);
     }
 
     #[test]
