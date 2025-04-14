@@ -61,17 +61,10 @@ impl ParamSet {
     /// Purely internal keygen function. Returns (ek,dk)
     fn k_pke_keygen(&self, d: &Bytes32) -> Result<(Bytes, Bytes)> {
         let mut random_bytes = Bytes::new();
-        println!("d = {:?}", hex::encode(d.as_bytes()));
         random_bytes.as_vec_mut().extend_from_slice(d.as_bytes());
         // We know it fits because max k == 4
         random_bytes.as_vec_mut().push(self.k as u8);
-        println!("rb = {:?}", hex::encode(random_bytes.as_bytes()));
         let (p, sigma) = basics::g(&random_bytes)?;
-        println!(
-            "p = {:?} sigma = {:?}",
-            hex::encode(p.as_bytes()),
-            hex::encode(sigma.as_bytes())
-        );
         let mut big_n = 0;
         let mut a_matrix = matrix::SquareMatrix::new(self.k);
         for i in 0..self.k {
@@ -80,12 +73,10 @@ impl ParamSet {
                 b.as_vec_mut().extend_from_slice(p.as_bytes());
                 b.as_vec_mut().push(j as u8);
                 b.as_vec_mut().push(i as u8);
-                println!("{i},{j} = {:?}", hex::encode(b.as_bytes()));
 
                 a_matrix.set(i, j, &sample::sample_ntt(&b)?);
             }
         }
-        println!("A = {:?}", &a_matrix);
         let mut s = matrix::Vector::new(self.k);
         for i in 0..self.k {
             s.set(
@@ -94,7 +85,6 @@ impl ParamSet {
             );
             big_n += 1;
         }
-        println!("S = {:?}", &s);
         let mut e = matrix::Vector::new(self.k);
         for i in 0..self.k {
             e.set(
@@ -103,11 +93,8 @@ impl ParamSet {
             );
             big_n += 1;
         }
-        println!("E = {:?}", &e);
         let s_hat = s.ntt()?;
         let e_hat = e.ntt()?;
-        println!("NTT_S = {:?}", &s_hat);
-        println!("NTT_E = {:?}", &e_hat);
 
         let t_hat = a_matrix.compose_hat(&s_hat)?.add(&e_hat)?;
         let mut ek_pke = Bytes::new();
@@ -177,15 +164,13 @@ mod tests {
         );
         let ml_kem_512 = ParamSet::ml_kem_512();
         let r = ml_kem_512.keygen(&t.d, &t.z).unwrap();
-        println!("{} - {}", t.ek.len(), r.public_enc.len());
         assert_eq!(t.ek, r.public_enc);
         assert_eq!(t.dk, r.private_dec);
     }
 
     #[test]
-    #[ignore]
     fn test_keygen_512() {
-        // At last, we can use the test vectors :-)
+        // At last, we can use the official test vectors :-)
         let test_vectors = vec![TestSet {
             z: Bytes32::from_hex(
                 "1A394111163803FE2E8519C335A6867556338EADAFA22B5FC557430560CCD693"
