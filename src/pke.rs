@@ -154,23 +154,16 @@ impl ParamSet {
             );
             big_n += 1;
         }
-        println!("e1 = {e1:?}");
         let e2 = sample::sample_poly_cbd(&basics::prf(self.n2, r, big_n), self.n2)?;
-        println!("y= {y:?}\n e1 = {e1:?}\n e2 = {e2:?}\n");
         let y_hat = y.ntt()?;
-        println!("y_hat = {y_hat:?}");
         let mut u = a_hat_matrix.compose_transpose_hat(&y_hat)?;
-        println!("noninvb = {u:?}");
         u = u.inv_ntt()?;
-        println!("invb = {u:?}");
         u.accumulate(&e1)?;
         let mu = basics::decompress_poly(basics::byte_decode(&Bytes::from(m), 1)?, 1);
         let mut v = t_hat.compose_transpose(&y_hat)?;
         v = ntt::inv_ntt(&v)?;
         basics::accumulate_vec(&mut v, &e2);
         basics::accumulate_vec(&mut v, &mu);
-        println!("v_acc = {v:?}");
-        println!("final_u = {u:?}");
         let mut c1 = Bytes::new();
         for i in 0..self.k {
             let val = basics::byte_encode(&basics::compress_poly(u.at(i), self.du), self.du)?;
@@ -198,7 +191,6 @@ impl ParamSet {
         let mut mek = Bytes::from(m);
         mek.accumulate_32(basics::h(ek)?);
         let (k, r) = basics::g(&mek)?;
-        println!("k,r = {k:?}, {r:?}");
         let c = self.k_pke_encrypt(ek, m, &r)?;
         Ok((k, c))
     }
