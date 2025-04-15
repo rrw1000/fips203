@@ -17,9 +17,10 @@ There are some very long-running tests (in particular, the reference test vector
 As a result, these tests are marked `#[ignore]` . To run them:
 
 ```
-cd vectors
+git clone git@github.com:rrw1000/fips-vectors
+cd fips-vectors/kem
 bunzip2 *.bz2
-cd ..
+cd ../..
 cargo test vectors -- --ignored
 ```
 

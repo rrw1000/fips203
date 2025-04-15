@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn vectors_test_768() {
         // Reads the file produced by the reference code's `test_vectors768` program and tests it against our code; see README for URLs.
-        let vec = test_utils::read_test_vectors("vectors/test_vectors768.txt").unwrap();
+        let vec = test_utils::read_test_vectors("fips-vectors/kem/test_vectors768.txt").unwrap();
         for (idx, t) in vec.iter().enumerate() {
             eprintln!("768: Test case {idx}");
             let ml_kem_768 = ParamSet::ml_kem_768();
@@ -395,7 +395,7 @@ mod tests {
     #[test]
     fn vectors_test_1024() {
         // Reads the file produced by the reference code's `test_vectors768` program and tests it against our code; see README for URLs.
-        let vec = test_utils::read_test_vectors("vectors/test_vectors1024.txt").unwrap();
+        let vec = test_utils::read_test_vectors("fips-vectors/kem/test_vectors1024.txt").unwrap();
         for (idx, t) in vec.iter().enumerate() {
             eprintln!("1024: Test case {idx}");
             let ml_kem_1024 = ParamSet::ml_kem_1024();
@@ -423,7 +423,7 @@ mod tests {
     #[test]
     fn vectors_test_512() {
         // Reads the file produced by the reference code's `test_vectors512` program and tests it against our code; see README for URLs.
-        let vec = test_utils::read_test_vectors("vectors/test_vectors512.txt").unwrap();
+        let vec = test_utils::read_test_vectors("fips-vectors/kem/test_vectors512.txt").unwrap();
         for (idx, t) in vec.iter().enumerate() {
             eprintln!("512: Test case {idx}");
             let ml_kem_512 = ParamSet::ml_kem_512();
