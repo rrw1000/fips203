@@ -97,7 +97,7 @@ impl Bytes {
     pub fn accumulate_32(&mut self, other: Bytes32) {
         self.0.extend(other.as_bytes())
     }
-    
+
     pub fn accumulate(&mut self, other: Bytes) {
         self.0.extend(other.as_bytes())
     }
@@ -130,6 +130,12 @@ impl Bytes {
         let hex_string = hex_string.trim_start_matches("0x");
         let bytes = hex::decode(hex_string)?;
         Ok(Self(bytes))
+    }
+}
+
+impl From<&Bytes32> for Bytes {
+    fn from(bytes: &Bytes32) -> Self {
+        Self(bytes.0.to_vec())
     }
 }
 

@@ -26,6 +26,15 @@ impl Vector {
         }
         Ok(new_vec)
     }
+
+    pub fn inv_ntt(&self) -> Result<Vector> {
+        let mut new_vec = Vector::new(self.dimension);
+        for i in 0..self.dimension {
+            new_vec.values[i as usize] = ntt::inv_ntt(&self.values[i as usize])?;
+        }
+        Ok(new_vec)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.dimension == 0
     }
@@ -36,6 +45,20 @@ impl Vector {
 
     pub fn at(&self, idx: u32) -> [u32; 256] {
         self.values[idx as usize]
+    }
+
+    pub fn accumulate(&mut self, v: &Vector) -> Result<()> {
+        if v.dimension != self.dimension {
+            return Err(anyhow!(
+                "Dimension mismatch {} != {}",
+                v.dimension,
+                self.dimension
+            ));
+        }
+        for j in 0..self.dimension {
+            basics::accumulate_vec(&mut self.values[j as usize], &v.values[j as usize]);
+        }
+        Ok(())
     }
 
     pub fn add(&self, v_hat: &Vector) -> Result<Vector> {
@@ -130,7 +153,7 @@ impl SquareMatrix {
         Ok(result)
     }
 
-    pub fn compose_transpose_hat(&self, u: Vector) -> Result<Vector> {
+    pub fn compose_transpose_hat(&self, u: &Vector) -> Result<Vector> {
         let k = self.dimension;
         if u.len() != k {
             return Err(anyhow!(
@@ -142,8 +165,13 @@ impl SquareMatrix {
         let mut result = Vector::new(self.dimension);
         for i in 0..k {
             for j in 0..k {
-                result.values[i as usize] =
-                    mul::multiply_ntts(self.values[self.idx(j, i) as usize], u.values[j as usize])?;
+                basics::accumulate_vec(
+                    &mut result.values[i as usize],
+                    &mul::multiply_ntts(
+                        self.values[self.idx(j, i) as usize],
+                        u.values[j as usize],
+                    )?,
+                );
             }
         }
         Ok(result)

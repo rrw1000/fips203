@@ -148,6 +148,24 @@ pub fn bytes_to_bits(b: &Bytes) -> Result<Bits> {
     Ok(Bits::from(result))
 }
 
+/// @todo: make this more efficient - probably need a custom poly type.
+pub fn compress_poly(x: [u32; 256], d: u8) -> [u32; 256] {
+    let mut result: [u32; 256] = [0; 256];
+    for i in 0..256 {
+        result[i] = compress(x[i], d);
+    }
+    result
+}
+
+/// @todo: make this more efficient - probably need a custom poly type.
+pub fn decompress_poly(x: [u32; 256], d: u8) -> [u32; 256] {
+    let mut result: [u32; 256] = [0; 256];
+    for i in 0..256 {
+        result[i] = decompress(x[i], d);
+    }
+    result
+}
+
 /// S4 4.2.1 - recall that we're told q = 3329 and bit len(q) == 12
 /// This means we can get away with this - there are probably more
 /// elegant ways, but..
