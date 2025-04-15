@@ -114,7 +114,6 @@ impl ParamSet {
         let mut ek_pos = 0;
         let ek_slice = ek.as_bytes();
         let mut t_hat = matrix::Vector::new(self.k);
-        println!("R= {:?}\n", hex::encode(r.as_bytes()));
         for i in 0..self.k {
             // @todo clean this up - needless copying.
             let b_val = Bytes::from_bytes(&ek_slice[ek_pos..ek_pos + 384]);
@@ -122,10 +121,6 @@ impl ParamSet {
             ek_pos += 384;
         }
         let p = Bytes::from_bytes(&ek_slice[ek_pos..ek_pos + 32]);
-        println!(
-            "unpacked_key = {t_hat:?} , seed = {:?}",
-            hex::encode(p.as_bytes())
-        );
 
         let mut a_hat_matrix = matrix::SquareMatrix::new(self.k);
         for i in 0..self.k {
@@ -137,7 +132,6 @@ impl ParamSet {
                 a_hat_matrix.set(i, j, &sample::sample_ntt(&b)?);
             }
         }
-        println!("A = {a_hat_matrix:?}");
         let mut y = matrix::Vector::new(self.k);
         for i in 0..self.k {
             y.set(
@@ -174,6 +168,37 @@ impl ParamSet {
         Ok(c1)
     }
 
+    fn k_pke_decrypt(&self, dk: &Bytes, c: &Bytes) -> Result<Bytes32> {
+        let expected_dk_len = (384 * self.k) as usize;
+        let expected_c_len = 32 * ((self.du as usize) * (self.k as usize) + (self.dv as usize));
+        if dk.len() != expected_dk_len {
+            return Err(anyhow!(
+                "Expected decryption key to be {expected_dk_len} bytes, got {}",
+                dk.len()
+            ));
+        }
+        if c.len() != expected_c_len {
+            return Err(anyhow!(
+                "Expected ciphertext to be {expected_c_len} bytes, got {}",
+                c.len()
+            ));
+        }
+        let (u_prime, tail) = matrix::Vector::decompress_from(c, self.k, self.du)?;
+        let c2 = &c.as_bytes()[tail..];
+        let v_prime = basics::decompress_poly(
+            basics::byte_decode(&Bytes::from_bytes(c2), self.dv)?,
+            self.dv,
+        );
+        let s_hat = matrix::Vector::decode_from(dk, 12, self.k)?;
+        let ntt_u_prime = u_prime.ntt()?;
+        let tmp_0 = s_hat.compose_transpose(&ntt_u_prime)?;
+        let inv_tmp_0 = ntt::inv_ntt(&tmp_0)?;
+        let mut w = v_prime;
+        basics::subtract_vec(&mut w, &inv_tmp_0);
+        let m = basics::byte_encode(&basics::compress_poly(w, 1), 1)?;
+        Bytes32::try_from(m.as_bytes())
+    }
+
     /// Alg 16 ; returns (ek,dk)
     fn keygen_internal(&self, d: &Bytes32, v: &Bytes32) -> Result<(Bytes, Bytes)> {
         let (ek_pke, dk_pke) = self.k_pke_keygen(d)?;
@@ -193,6 +218,31 @@ impl ParamSet {
         let (k, r) = basics::g(&mek)?;
         let c = self.k_pke_encrypt(ek, m, &r)?;
         Ok((k, c))
+    }
+
+    /// Alg 18: decaps_internal
+    /// Returns the shared secret key
+    fn decaps_internal(&self, dk: &Bytes, ct: &Bytes) -> Result<Bytes32> {
+        // Write these out to avoid value dependencies on the indices.
+        let k = self.k as usize;
+        let dk_pke = dk.interval(0..384 * k);
+        let ek_pke = dk.interval(384 * k..768 * k + 32);
+        let h = dk.interval(768 * k + 32..768 * k + 64);
+        let z = dk.interval(768 * k + 64..768 * k + 96);
+        let m_prime = self.k_pke_decrypt(&dk_pke, &ct)?;
+        let mut m_h = Bytes::new();
+        m_h.accumulate_32(m_prime);
+        m_h.accumulate(h);
+        let (mut k_prime, r_prime) = basics::g(&m_h)?;
+        let mut z_c = Bytes::from(z);
+        z_c.accumulate(ct.clone());
+        let k_bar = basics::j(&z_c)?;
+        let c_prime = self.k_pke_encrypt(&ek_pke, &m_prime, &r_prime)?;
+        if c_prime != *ct {
+            // Implicit rejection.
+            k_prime = k_bar;
+        }
+        Ok(k_prime)
     }
 
     /// Returns: (key, ciphertext)
@@ -218,6 +268,26 @@ impl ParamSet {
             ptr += 384;
         }
         self.encaps_internal(ek, m)
+    }
+
+    pub fn decaps(&self, d: &Bytes, c: &Bytes) -> Result<Bytes32> {
+        let c_len = 32 * ((self.du as usize) * (self.k as usize) + (self.dv as usize));
+        if c.len() != c_len {
+            return Err(anyhow!(
+                "Expected ciphertext length {c_len}, got {}",
+                c.len()
+            ));
+        }
+        let d_len = (self.k as usize) * 768 + 96;
+        if d.len() != d_len {
+            return Err(anyhow!("Expected d_k len {d_len}, got {}", d.len()));
+        }
+        let test = basics::h(&d.interval(384 * (self.k as usize)..768 * (self.k as usize) + 32))?;
+        let expect = d.interval(768 * (self.k as usize) + 32..768 * (self.k as usize) + 64);
+        if test.as_bytes() != expect.as_bytes() {
+            return Err(anyhow!("Hash test failed"));
+        }
+        self.decaps_internal(d, c)
     }
 
     // Somewhat pointless, but the standard does it, so we should too :-)
@@ -286,6 +356,8 @@ mod tests {
         let (key, ct) = ml_kem_512.encaps(&t.ek, &t.m).unwrap();
         assert_eq!(t.secret, key);
         assert_eq!(t.ct, ct);
+        let decaps_key = ml_kem_512.decaps(&r.private_dec, &ct).unwrap();
+        assert_eq!(key, decaps_key);
     }
 
     // #[test]

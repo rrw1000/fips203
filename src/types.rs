@@ -5,7 +5,7 @@ use sha3::{
     digest::{ExtendableOutput, Update},
 };
 use std::iter::Iterator;
-use std::ops::Index;
+use std::ops::{Index, Range};
 use std::{fmt, io::Read};
 
 pub struct XOF(Shake128);
@@ -124,6 +124,10 @@ impl Bytes {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn interval(&self, r: Range<usize>) -> Bytes {
+        Self(self.0.as_slice()[r].to_vec())
     }
 
     pub fn from_hex(hex_string: &str) -> Result<Self> {
