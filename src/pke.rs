@@ -303,6 +303,7 @@ impl ParamSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils;
 
     struct TestSet {
         d: Bytes32,
@@ -358,6 +359,33 @@ mod tests {
         assert_eq!(t.ct, ct);
         let decaps_key = ml_kem_512.decaps(&r.private_dec, &ct).unwrap();
         assert_eq!(key, decaps_key);
+    }
+
+    #[test]
+    fn test_vectors_512() {
+        // Reads the file produced by the reference code's `test_vectors512` program and tests it against our code; see README for URLs.
+        let vec = test_utils::read_test_vectors("vectors/test_vectors512.txt").unwrap();
+        for (idx, t) in vec.iter().enumerate() {
+            eprintln!("Test case {idx}");
+            let ml_kem_512 = ParamSet::ml_kem_512();
+            let r = ml_kem_512.keygen(&t.d, &t.z).unwrap();
+            assert_eq!(t.ek, r.public_enc);
+            assert_eq!(t.dk, r.private_dec);
+            let (key, ct) = ml_kem_512.encaps(&t.ek, &t.m).unwrap();
+            assert_eq!(t.secret, key);
+            assert_eq!(t.ct, ct);
+            let decaps_key = ml_kem_512.decaps(&r.private_dec, &ct).unwrap();
+            assert_eq!(key, decaps_key);
+            // Corrupt the ciphertext and check that we get an implicit reject.
+            let mut bad_ct = ct.clone();
+            bad_ct.as_vec_mut()[0] += 1;
+            let bad_decaps_key = ml_kem_512.decaps(&r.private_dec, &bad_ct).unwrap();
+            assert_ne!(key, bad_decaps_key);
+            let known_bad_decaps_key = ml_kem_512
+                .decaps(&r.private_dec, &t.implicit_reject_ct)
+                .unwrap();
+            assert_eq!(t.implicit_reject, known_bad_decaps_key);
+        }
     }
 
     // #[test]
