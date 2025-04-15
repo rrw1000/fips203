@@ -337,7 +337,6 @@ mod tests {
         }
     }
 
-    // Uses the intermediate value ke
     #[test]
     fn test_ref_512() {
         // This is the first vector from the kyber test repo, used so that I can check the intermediate values.
@@ -361,12 +360,72 @@ mod tests {
         assert_eq!(key, decaps_key);
     }
 
+    // I did think about unifying these, or at least making them common code
+    // @todo really should in the future.
+
+    #[ignore]
     #[test]
-    fn test_vectors_512() {
+    fn vectors_test_768() {
+        // Reads the file produced by the reference code's `test_vectors768` program and tests it against our code; see README for URLs.
+        let vec = test_utils::read_test_vectors("vectors/test_vectors768.txt").unwrap();
+        for (idx, t) in vec.iter().enumerate() {
+            eprintln!("768: Test case {idx}");
+            let ml_kem_768 = ParamSet::ml_kem_768();
+            let r = ml_kem_768.keygen(&t.d, &t.z).unwrap();
+            assert_eq!(t.ek, r.public_enc);
+            assert_eq!(t.dk, r.private_dec);
+            let (key, ct) = ml_kem_768.encaps(&t.ek, &t.m).unwrap();
+            assert_eq!(t.secret, key);
+            assert_eq!(t.ct, ct);
+            let decaps_key = ml_kem_768.decaps(&r.private_dec, &ct).unwrap();
+            assert_eq!(key, decaps_key);
+            // Corrupt the ciphertext and check that we get an implicit reject.
+            let mut bad_ct = ct.clone();
+            bad_ct.as_vec_mut()[0] ^= 1;
+            let bad_decaps_key = ml_kem_768.decaps(&r.private_dec, &bad_ct).unwrap();
+            assert_ne!(key, bad_decaps_key);
+            let known_bad_decaps_key = ml_kem_768
+                .decaps(&r.private_dec, &t.implicit_reject_ct)
+                .unwrap();
+            assert_eq!(t.implicit_reject, known_bad_decaps_key);
+        }
+    }
+
+    #[ignore]
+    #[test]
+    fn vectors_test_1024() {
+        // Reads the file produced by the reference code's `test_vectors768` program and tests it against our code; see README for URLs.
+        let vec = test_utils::read_test_vectors("vectors/test_vectors1024.txt").unwrap();
+        for (idx, t) in vec.iter().enumerate() {
+            eprintln!("1024: Test case {idx}");
+            let ml_kem_1024 = ParamSet::ml_kem_1024();
+            let r = ml_kem_1024.keygen(&t.d, &t.z).unwrap();
+            assert_eq!(t.ek, r.public_enc);
+            assert_eq!(t.dk, r.private_dec);
+            let (key, ct) = ml_kem_1024.encaps(&t.ek, &t.m).unwrap();
+            assert_eq!(t.secret, key);
+            assert_eq!(t.ct, ct);
+            let decaps_key = ml_kem_1024.decaps(&r.private_dec, &ct).unwrap();
+            assert_eq!(key, decaps_key);
+            // Corrupt the ciphertext and check that we get an implicit reject.
+            let mut bad_ct = ct.clone();
+            bad_ct.as_vec_mut()[0] ^= 1;
+            let bad_decaps_key = ml_kem_1024.decaps(&r.private_dec, &bad_ct).unwrap();
+            assert_ne!(key, bad_decaps_key);
+            let known_bad_decaps_key = ml_kem_1024
+                .decaps(&r.private_dec, &t.implicit_reject_ct)
+                .unwrap();
+            assert_eq!(t.implicit_reject, known_bad_decaps_key);
+        }
+    }
+
+    #[ignore]
+    #[test]
+    fn vectors_test_512() {
         // Reads the file produced by the reference code's `test_vectors512` program and tests it against our code; see README for URLs.
         let vec = test_utils::read_test_vectors("vectors/test_vectors512.txt").unwrap();
         for (idx, t) in vec.iter().enumerate() {
-            eprintln!("Test case {idx}");
+            eprintln!("512: Test case {idx}");
             let ml_kem_512 = ParamSet::ml_kem_512();
             let r = ml_kem_512.keygen(&t.d, &t.z).unwrap();
             assert_eq!(t.ek, r.public_enc);
@@ -378,7 +437,7 @@ mod tests {
             assert_eq!(key, decaps_key);
             // Corrupt the ciphertext and check that we get an implicit reject.
             let mut bad_ct = ct.clone();
-            bad_ct.as_vec_mut()[0] += 1;
+            bad_ct.as_vec_mut()[0] ^= 1;
             let bad_decaps_key = ml_kem_512.decaps(&r.private_dec, &bad_ct).unwrap();
             assert_ne!(key, bad_decaps_key);
             let known_bad_decaps_key = ml_kem_512
