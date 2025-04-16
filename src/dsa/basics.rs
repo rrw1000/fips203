@@ -98,6 +98,18 @@ pub fn simple_bit_unpack(b: u32, v: &Bytes) -> Result<[u32; 256]> {
     Ok(result)
 }
 
+pub fn bit_unpack(v: &Bytes, a: u32, b: u32) -> Result<[i32; 256]> {
+    let mut result: [i32; 256] = [0; 256];
+    let c = bitlen(a + b);
+    let z = format::bytes_to_bits(v)?;
+    for (idx, elem) in result.iter_mut().enumerate() {
+        let bit_idx = idx * (c as usize);
+        *elem =
+            (b as i32) - (bits_to_integer(&z.interval(bit_idx..bit_idx + (c as usize)), c) as i32);
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,6 +153,17 @@ mod tests {
         assert_eq!(expected, result);
         let unpacked = simple_bit_unpack(46, &result).unwrap();
         assert_eq!(r, unpacked);
+    }
+
+    #[test]
+    fn test_bit_pack() {
+        let mut r: [i32; 256] = [4; 256];
+        r[0] = -1;
+        r[1] = 56;
+        r[2] = -19;
+        let packed = bit_pack(&r, 20, 58).unwrap();
+        let unpacked = bit_unpack(&packed, 20, 58).unwrap();
+        assert_eq!(r, unpacked)
     }
 
     #[test]
