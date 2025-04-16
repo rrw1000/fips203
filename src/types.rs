@@ -245,6 +245,43 @@ impl fmt::Display for IntRange2To3 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntRange2Or4 {
+    Two = 2,
+    Four = 4,
+}
+
+impl IntRange2Or4 {
+    pub fn value(&self) -> u32 {
+        match self {
+            IntRange2Or4::Two => 2,
+            IntRange2Or4::Four => 4,
+        }
+    }
+
+    pub fn try_from(value: u32) -> Option<Self> {
+        match value {
+            2 => Some(IntRange2Or4::Two),
+            4 => Some(IntRange2Or4::Four),
+            _ => None,
+        }
+    }
+    
+    pub fn from_u32(value: u32) -> Result<Self> {
+        Self::try_from(value).ok_or_else(|| anyhow!("Invalid IntRange2Or4 value: {}", value))
+    }
+    
+    pub fn to_u32(&self) -> u32 {
+        self.value()
+    }
+}
+
+impl fmt::Display for IntRange2Or4 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BitVector {
     // Underlying storage as bytes
@@ -461,6 +498,29 @@ mod tests {
         let default_bytes32 = Bytes32::default();
         let all_zeros = [0u8; 32];
         assert_eq!(default_bytes32.as_bytes(), &all_zeros);
+    }
+    
+    #[test]
+    fn test_int_ranges() {
+        // Test IntRange2To3
+        assert_eq!(IntRange2To3::Two.value(), 2);
+        assert_eq!(IntRange2To3::Three.value(), 3);
+        assert_eq!(IntRange2To3::try_from(2), Some(IntRange2To3::Two));
+        assert_eq!(IntRange2To3::try_from(3), Some(IntRange2To3::Three));
+        assert_eq!(IntRange2To3::try_from(4), None);
+        
+        // Test IntRange2Or4
+        assert_eq!(IntRange2Or4::Two.value(), 2);
+        assert_eq!(IntRange2Or4::Four.value(), 4);
+        assert_eq!(IntRange2Or4::try_from(2), Some(IntRange2Or4::Two));
+        assert_eq!(IntRange2Or4::try_from(4), Some(IntRange2Or4::Four));
+        assert_eq!(IntRange2Or4::try_from(3), None);
+        
+        // Test Display implementation
+        assert_eq!(format!("{}", IntRange2To3::Two), "2");
+        assert_eq!(format!("{}", IntRange2To3::Three), "3");
+        assert_eq!(format!("{}", IntRange2Or4::Two), "2");
+        assert_eq!(format!("{}", IntRange2Or4::Four), "4");
     }
 
     #[test]

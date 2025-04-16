@@ -186,8 +186,10 @@ impl ParamSet {
         }
         let (u_prime, tail) = matrix::Vector::decompress_from(c, self.k, self.du)?;
         let c2 = &c.as_bytes()[tail..];
-        let v_prime =
-            basics::decompress_poly(basics::byte_decode(&Bytes::from_bytes(c2), self.dv)?, self.dv);
+        let v_prime = basics::decompress_poly(
+            basics::byte_decode(&Bytes::from_bytes(c2), self.dv)?,
+            self.dv,
+        );
         let s_hat = matrix::Vector::decode_from(dk, 12, self.k)?;
         let ntt_u_prime = u_prime.ntt()?;
         let tmp_0 = s_hat.compose_transpose(&ntt_u_prime)?;

@@ -1,7 +1,7 @@
 // Basic functions required by FIPS-203
 
-use crate::{format, kem::basics};
 use crate::types::{Bytes, IntRange2To3, XOF};
+use crate::{format, kem::basics};
 use anyhow::{Result, anyhow};
 
 // S4.2.2

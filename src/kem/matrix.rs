@@ -86,7 +86,11 @@ impl Vector {
             ));
         }
         for j in 0..self.dimension {
-            format::accumulate_vec(&mut self.values[j as usize], &v.values[j as usize], basics::Q);
+            format::accumulate_vec(
+                &mut self.values[j as usize],
+                &v.values[j as usize],
+                basics::Q,
+            );
         }
         Ok(())
     }
