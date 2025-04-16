@@ -63,7 +63,7 @@ pub fn coeff_from_half_byte(b: u8, n: IntRange2Or4) -> Option<i32> {
 }
 
 pub fn bitlen(b: u32) -> u32 {
-    if b == 0 { 0 } else { b.ilog2() }
+    if b == 0 { 0 } else { b.ilog2() + 1 }
 }
 
 pub fn simple_bit_pack(b: u32, r: &[u32; 256]) -> Result<Bytes> {
@@ -74,6 +74,28 @@ pub fn simple_bit_pack(b: u32, r: &[u32; 256]) -> Result<Bytes> {
         z.as_vec_mut().append(this_coeff.as_vec_mut());
     }
     format::bits_to_bytes(&z)
+}
+
+// Here, since the modulus isn't specified, we have vectors over i32.
+pub fn bit_pack(w: &[i32; 256], a: u32, b: u32) -> Result<Bytes> {
+    let mut z = Bits::default();
+    let nr_bits = bitlen(a + b);
+    for v in w.iter() {
+        let mut this_coeff = integer_to_bits(((b as i32) - v) as u32, nr_bits);
+        z.as_vec_mut().append(this_coeff.as_vec_mut());
+    }
+    format::bits_to_bytes(&z)
+}
+
+pub fn simple_bit_unpack(b: u32, v: &Bytes) -> Result<[u32; 256]> {
+    let mut result: [u32; 256] = [0; 256];
+    let nr_bits = bitlen(b);
+    let z = format::bytes_to_bits(v)?;
+    for (idx, item) in result.iter_mut().enumerate() {
+        let bit_idx = idx * (nr_bits as usize);
+        *item = bits_to_integer(&z.interval(bit_idx..bit_idx + (nr_bits as usize)), nr_bits);
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -109,14 +131,16 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_bit_pack() {
+    fn test_simple_bit_pack_unpack() {
         let mut r: [u32; 256] = [12; 256];
-        r[4] = 45;
+        r[0] = 45;
         let result = simple_bit_pack(46, &r).unwrap();
+        println!("result = {}", hex::encode(result.as_vec()));
         // regression test.
-        let expected = Bytes::from_hex("8c31d618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c618638c31c61863").unwrap();
-        println!("{}", hex::encode(result.as_vec()));
+        let expected = Bytes::from_hex("2dc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc330").unwrap();
         assert_eq!(expected, result);
+        let unpacked = simple_bit_unpack(46, &result).unwrap();
+        assert_eq!(r, unpacked);
     }
 
     #[test]

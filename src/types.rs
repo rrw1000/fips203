@@ -61,6 +61,10 @@ impl Bits {
         &mut self.0
     }
 
+    pub fn interval(&self, r: Range<usize>) -> Bits {
+        Self(self.0.as_slice()[r].to_vec())
+    }
+
     pub fn from_bitstring(bit_string: &str) -> Result<Self> {
         let mut result = Vec::new();
         // Hard without try_map()
