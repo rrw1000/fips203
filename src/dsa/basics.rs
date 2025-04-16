@@ -110,6 +110,51 @@ pub fn bit_unpack(v: &Bytes, a: u32, b: u32) -> Result<[i32; 256]> {
     Ok(result)
 }
 
+pub fn hint_bit_pack(v: &Vec<[i32; 256]>, w: u32) -> Bytes {
+    let mut result = Bytes::default();
+    let vec = result.as_vec_mut();
+    let k = v.len();
+    vec.resize((w as usize) + k, 0);
+    let mut index = 0;
+    for (i, h) in v.iter().enumerate() {
+        for (j, elem) in h.iter().enumerate() {
+            if *elem != 0 {
+                vec[index] = j as u8;
+                index += 1;
+            }
+        }
+        vec[(w as usize) + i] = index as u8;
+    }
+    result
+}
+
+pub fn hint_bit_unpack(y: &Bytes, w: u32) -> Option<Vec<[i32; 256]>> {
+    // First, recover k.
+    let k = y.len() - (w as usize);
+    let y_slice = y.as_bytes();
+    let mut result: Vec<[i32; 256]> = vec![[0; 256]; k];
+    let mut index = 0;
+    for (i, v) in result.iter_mut().enumerate() {
+        if y_slice[(w as usize) + i] < index || y_slice[(w as usize) + i] > (w as u8) {
+            return None;
+        }
+        let first = index;
+        while index < y_slice[(w as usize) + i] {
+            if index > first && y_slice[(index as usize) - 1] >= y_slice[index as usize] {
+                return None;
+            }
+            v[y_slice[index as usize] as usize] = 1;
+            index += 1;
+        }
+    }
+    for i in (index as usize)..((w - 1) as usize) {
+        if y_slice[i] != 0 {
+            return None;
+        }
+    }
+    Some(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,5 +218,17 @@ mod tests {
         assert_eq!(Some(0x12345), coeff_from_three_bytes(0x45, 0x23, 0x81));
         // > Q.
         assert_eq!(None, coeff_from_three_bytes(0xff, 0xff, 0x7f));
+    }
+
+    #[test]
+    fn test_hint_bits() {
+        let mut v: Vec<[i32; 256]> = vec![[0; 256]; 12];
+        v[0][1] = 1;
+        v[2][23] = 1;
+        v[7][14] = 1;
+        v[8][2] = 1;
+        let packed = hint_bit_pack(&v, 16);
+        let unpacked = hint_bit_unpack(&packed, 16).unwrap();
+        assert_eq!(v, unpacked);
     }
 }
