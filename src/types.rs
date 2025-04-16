@@ -139,6 +139,15 @@ impl Bytes {
         let bytes = hex::decode(hex_string)?;
         Ok(Self(bytes))
     }
+    pub fn to_bytes32(&self) -> Result<Bytes32> {
+        if self.len() != 32 {
+            return Err(anyhow!(
+                "Invalid byte length: expected 32 bytes, got {}",
+                self.len()
+            ));
+        }
+        Ok(Bytes32(self.0.as_slice().try_into()?))
+    }
 }
 
 impl From<&Bytes32> for Bytes {
@@ -270,11 +279,11 @@ impl IntRange2Or4 {
             _ => None,
         }
     }
-    
+
     pub fn from_u32(value: u32) -> Result<Self> {
         Self::try_from(value).ok_or_else(|| anyhow!("Invalid IntRange2Or4 value: {}", value))
     }
-    
+
     pub fn to_u32(&self) -> u32 {
         self.value()
     }
@@ -503,7 +512,7 @@ mod tests {
         let all_zeros = [0u8; 32];
         assert_eq!(default_bytes32.as_bytes(), &all_zeros);
     }
-    
+
     #[test]
     fn test_int_ranges() {
         // Test IntRange2To3
@@ -512,14 +521,14 @@ mod tests {
         assert_eq!(IntRange2To3::try_from(2), Some(IntRange2To3::Two));
         assert_eq!(IntRange2To3::try_from(3), Some(IntRange2To3::Three));
         assert_eq!(IntRange2To3::try_from(4), None);
-        
+
         // Test IntRange2Or4
         assert_eq!(IntRange2Or4::Two.value(), 2);
         assert_eq!(IntRange2Or4::Four.value(), 4);
         assert_eq!(IntRange2Or4::try_from(2), Some(IntRange2Or4::Two));
         assert_eq!(IntRange2Or4::try_from(4), Some(IntRange2Or4::Four));
         assert_eq!(IntRange2Or4::try_from(3), None);
-        
+
         // Test Display implementation
         assert_eq!(format!("{}", IntRange2To3::Two), "2");
         assert_eq!(format!("{}", IntRange2To3::Three), "3");
