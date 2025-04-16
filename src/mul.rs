@@ -1,10 +1,10 @@
-use crate::basics;
+use crate::kem;
 use anyhow::Result;
 
 fn base_case_multiply(a: (u32, u32), b: (u32, u32), gamma: u32) -> (u32, u32) {
     // this is all mod Q, so we need to reduce every two multiplies,
-    let c0 = (((a.0 * b.0) % basics::Q) + ((a.1 * b.1 % basics::Q) * gamma)) % basics::Q;
-    let c1 = (a.0 * b.1) % basics::Q + (a.1 * b.0) % basics::Q;
+    let c0 = (((a.0 * b.0) % kem::Q) + ((a.1 * b.1 % kem::Q) * gamma)) % kem::Q;
+    let c1 = (a.0 * b.1) % kem::Q + (a.1 * b.0) % kem::Q;
     (c0, c1)
 }
 
@@ -13,7 +13,7 @@ pub fn multiply_ntts(f_bar: [u32; 256], g_bar: [u32; 256]) -> Result<[u32; 256]>
     // We step through all the arrays, two entries at a time.
     // @todo could probably be cleverer about coding the degree-2 polys here rather than using the representation in the standard.
     for i in 0..128 {
-        let zeta = basics::zeta_2(u32::try_from(i)?);
+        let zeta = kem::zeta_2(u32::try_from(i)?);
         // Probably as cheap to shift here as count by two and shift back, and clearer this way too.
         let i_2: usize = i << 1;
         (h_bar[i_2], h_bar[i_2 + 1]) = base_case_multiply(
@@ -43,12 +43,12 @@ mod tests {
         // This is "just" a regression test.
         let mut rng = rand::rngs::StdRng::seed_from_u64(925);
         let f_hat: [u32; 256] = (0..256)
-            .map(|_| rng.random_range(0..basics::Q))
+            .map(|_| rng.random_range(0..kem::Q))
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
         let g_hat: [u32; 256] = (0..256)
-            .map(|_| rng.random_range(0..basics::Q))
+            .map(|_| rng.random_range(0..kem::Q))
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();

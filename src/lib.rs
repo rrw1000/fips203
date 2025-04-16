@@ -1,4 +1,5 @@
 pub mod basics;
+pub mod kem;
 pub mod matrix;
 pub mod mul;
 pub mod ntt;

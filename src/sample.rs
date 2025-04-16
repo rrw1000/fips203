@@ -1,7 +1,7 @@
 // Basic functions required by FIPS-203
 
-use crate::basics;
 use crate::types::{Bytes, IntRange2To3, XOF};
+use crate::{basics, kem};
 use anyhow::{Result, anyhow};
 
 // S4.2.2
@@ -25,11 +25,11 @@ pub fn sample_ntt(b: &Bytes) -> Result<[u32; 256]> {
         let c2: u32 = c[2].into();
         let d1: u32 = c0 + (256 * (c1 % 16));
         let d2: u32 = (c1 / 16) + (16 * c2);
-        if d1 < basics::Q {
+        if d1 < kem::Q {
             rv[j] = d1;
             j += 1;
         }
-        if d2 < basics::Q && j < 256 {
+        if d2 < kem::Q && j < 256 {
             rv[j] = d2;
             j += 1;
         }
@@ -60,7 +60,7 @@ pub fn sample_poly_cbd(b: &Bytes, n: IntRange2To3) -> Result<[u32; 256]> {
             x += u32::from(bits[idx + j]);
             y += u32::from(bits[idx + n_value + j]);
         }
-        *f_r = basics::sub_mod(x, y, basics::Q);
+        *f_r = basics::sub_mod(x, y, kem::Q);
     }
     Ok(f)
 }

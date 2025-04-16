@@ -1,4 +1,4 @@
-use crate::{basics, mul, ntt, types::Bytes};
+use crate::{basics, kem, mul, ntt, types::Bytes};
 use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -21,7 +21,7 @@ impl Vector {
             dimension,
         };
         for idx in 0..(dimension as usize) {
-            rv.values[idx] = basics::byte_decode(&data.interval(idx * 384..(idx + 1) * 384), d)?
+            rv.values[idx] = kem::byte_decode(&data.interval(idx * 384..(idx + 1) * 384), d)?
         }
         Ok(rv)
     }
@@ -35,7 +35,7 @@ impl Vector {
         let mult = 32 * (du as usize);
         for idx in 0..(dimension as usize) {
             let c = bytes.interval(idx * mult..(idx + 1) * mult);
-            rv.values[idx] = basics::decompress_poly(basics::byte_decode(&c, du)?, du);
+            rv.values[idx] = kem::decompress_poly(kem::byte_decode(&c, du)?, du);
         }
 
         Ok((rv, 32 * (du as usize) * (dimension as usize)))
@@ -82,7 +82,7 @@ impl Vector {
             ));
         }
         for j in 0..self.dimension {
-            basics::accumulate_vec(&mut self.values[j as usize], &v.values[j as usize]);
+            basics::accumulate_vec(&mut self.values[j as usize], &v.values[j as usize], kem::Q);
         }
         Ok(())
     }
@@ -99,7 +99,11 @@ impl Vector {
         let k = self.dimension;
         for j in 0..k {
             result.values[j as usize] = self.values[j as usize];
-            basics::accumulate_vec(&mut result.values[j as usize], &v_hat.values[j as usize]);
+            basics::accumulate_vec(
+                &mut result.values[j as usize],
+                &v_hat.values[j as usize],
+                kem::Q,
+            );
         }
         Ok(result)
     }
@@ -118,6 +122,7 @@ impl Vector {
             basics::accumulate_vec(
                 &mut z,
                 &mul::multiply_ntts(self.values[j as usize], v_hat.values[j as usize])?,
+                kem::Q,
             );
         }
         Ok(z)
@@ -173,6 +178,7 @@ impl SquareMatrix {
                         self.values[self.idx(i, j) as usize],
                         u.values[j as usize],
                     )?,
+                    kem::Q,
                 );
             }
         }
@@ -197,6 +203,7 @@ impl SquareMatrix {
                         self.values[self.idx(j, i) as usize],
                         u.values[j as usize],
                     )?,
+                    kem::Q,
                 );
             }
         }
