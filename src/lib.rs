@@ -1,10 +1,5 @@
-pub mod basics;
-pub mod kem;
-pub mod matrix;
-pub mod mul;
-pub mod ntt;
-pub mod pke;
-pub mod sample;
+pub mod format;
 #[cfg(test)]
 pub mod test_utils;
 pub mod types;
+pub mod kem;

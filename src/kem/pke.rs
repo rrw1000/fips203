@@ -1,5 +1,6 @@
 use crate::{
-    basics, kem, matrix, ntt, sample,
+    format,
+    kem::{basics, matrix, ntt, sample},
     types::{Bytes, Bytes32, IntRange2To3},
 };
 use anyhow::{Result, anyhow};
@@ -64,7 +65,7 @@ impl ParamSet {
         random_bytes.as_vec_mut().extend_from_slice(d.as_bytes());
         // We know it fits because max k == 4
         random_bytes.as_vec_mut().push(self.k as u8);
-        let (p, sigma) = kem::g(&random_bytes)?;
+        let (p, sigma) = basics::g(&random_bytes)?;
         let mut big_n = 0;
         let mut a_matrix = matrix::SquareMatrix::new(self.k);
         for i in 0..self.k {
@@ -81,7 +82,7 @@ impl ParamSet {
         for i in 0..self.k {
             s.set(
                 i,
-                &sample::sample_poly_cbd(&kem::prf(self.n1, &sigma, big_n), self.n1)?,
+                &sample::sample_poly_cbd(&basics::prf(self.n1, &sigma, big_n), self.n1)?,
             );
             big_n += 1;
         }
@@ -89,7 +90,7 @@ impl ParamSet {
         for i in 0..self.k {
             e.set(
                 i,
-                &sample::sample_poly_cbd(&kem::prf(self.n1, &sigma, big_n), self.n1)?,
+                &sample::sample_poly_cbd(&basics::prf(self.n1, &sigma, big_n), self.n1)?,
             );
             big_n += 1;
         }
@@ -100,9 +101,9 @@ impl ParamSet {
         let mut ek_pke = Bytes::new();
         let mut dk_pke = Bytes::new();
         for i in 0..self.k {
-            let e_value = kem::byte_encode(&t_hat.at(i), 12)?;
+            let e_value = basics::byte_encode(&t_hat.at(i), 12)?;
             ek_pke.accumulate(e_value);
-            let d_value = kem::byte_encode(&s_hat.at(i), 12)?;
+            let d_value = basics::byte_encode(&s_hat.at(i), 12)?;
             dk_pke.accumulate(d_value);
         }
         ek_pke.as_vec_mut().extend(p.as_bytes());
@@ -117,7 +118,7 @@ impl ParamSet {
         for i in 0..self.k {
             // @todo clean this up - needless copying.
             let b_val = Bytes::from_bytes(&ek_slice[ek_pos..ek_pos + 384]);
-            t_hat.set(i, &kem::byte_decode(&b_val, 12)?);
+            t_hat.set(i, &basics::byte_decode(&b_val, 12)?);
             ek_pos += 384;
         }
         let p = Bytes::from_bytes(&ek_slice[ek_pos..ek_pos + 32]);
@@ -136,7 +137,7 @@ impl ParamSet {
         for i in 0..self.k {
             y.set(
                 i,
-                &sample::sample_poly_cbd(&kem::prf(self.n1, r, big_n), self.n1)?,
+                &sample::sample_poly_cbd(&basics::prf(self.n1, r, big_n), self.n1)?,
             );
             big_n += 1;
         }
@@ -144,26 +145,26 @@ impl ParamSet {
         for i in 0..self.k {
             e1.set(
                 i,
-                &sample::sample_poly_cbd(&kem::prf(self.n2, r, big_n), self.n2)?,
+                &sample::sample_poly_cbd(&basics::prf(self.n2, r, big_n), self.n2)?,
             );
             big_n += 1;
         }
-        let e2 = sample::sample_poly_cbd(&kem::prf(self.n2, r, big_n), self.n2)?;
+        let e2 = sample::sample_poly_cbd(&basics::prf(self.n2, r, big_n), self.n2)?;
         let y_hat = y.ntt()?;
         let mut u = a_hat_matrix.compose_transpose_hat(&y_hat)?;
         u = u.inv_ntt()?;
         u.accumulate(&e1)?;
-        let mu = kem::decompress_poly(kem::byte_decode(&Bytes::from(m), 1)?, 1);
+        let mu = basics::decompress_poly(basics::byte_decode(&Bytes::from(m), 1)?, 1);
         let mut v = t_hat.compose_transpose(&y_hat)?;
         v = ntt::inv_ntt(&v)?;
-        basics::accumulate_vec(&mut v, &e2, kem::Q);
-        basics::accumulate_vec(&mut v, &mu, kem::Q);
+        format::accumulate_vec(&mut v, &e2, basics::Q);
+        format::accumulate_vec(&mut v, &mu, basics::Q);
         let mut c1 = Bytes::new();
         for i in 0..self.k {
-            let val = kem::byte_encode(&kem::compress_poly(u.at(i), self.du), self.du)?;
+            let val = basics::byte_encode(&basics::compress_poly(u.at(i), self.du), self.du)?;
             c1.accumulate(val);
         }
-        let c2 = kem::byte_encode(&kem::compress_poly(v, self.dv), self.dv)?;
+        let c2 = basics::byte_encode(&basics::compress_poly(v, self.dv), self.dv)?;
         c1.accumulate(c2);
         Ok(c1)
     }
@@ -186,14 +187,14 @@ impl ParamSet {
         let (u_prime, tail) = matrix::Vector::decompress_from(c, self.k, self.du)?;
         let c2 = &c.as_bytes()[tail..];
         let v_prime =
-            kem::decompress_poly(kem::byte_decode(&Bytes::from_bytes(c2), self.dv)?, self.dv);
+            basics::decompress_poly(basics::byte_decode(&Bytes::from_bytes(c2), self.dv)?, self.dv);
         let s_hat = matrix::Vector::decode_from(dk, 12, self.k)?;
         let ntt_u_prime = u_prime.ntt()?;
         let tmp_0 = s_hat.compose_transpose(&ntt_u_prime)?;
         let inv_tmp_0 = ntt::inv_ntt(&tmp_0)?;
         let mut w = v_prime;
-        basics::subtract_vec(&mut w, &inv_tmp_0, kem::Q);
-        let m = kem::byte_encode(&kem::compress_poly(w, 1), 1)?;
+        format::subtract_vec(&mut w, &inv_tmp_0, basics::Q);
+        let m = basics::byte_encode(&basics::compress_poly(w, 1), 1)?;
         Bytes32::try_from(m.as_bytes())
     }
 
@@ -203,7 +204,7 @@ impl ParamSet {
         let mut dk = Bytes::new();
         dk.accumulate(dk_pke);
         dk.accumulate(ek_pke.clone());
-        dk.accumulate_32(kem::h(&ek_pke)?);
+        dk.accumulate_32(basics::h(&ek_pke)?);
         dk.accumulate_32(*v);
         Ok((ek_pke, dk))
     }
@@ -212,8 +213,8 @@ impl ParamSet {
     /// Returns (key, ciphertext)
     fn encaps_internal(&self, ek: &Bytes, m: &Bytes32) -> Result<(Bytes32, Bytes)> {
         let mut mek = Bytes::from(m);
-        mek.accumulate_32(kem::h(ek)?);
-        let (k, r) = kem::g(&mek)?;
+        mek.accumulate_32(basics::h(ek)?);
+        let (k, r) = basics::g(&mek)?;
         let c = self.k_pke_encrypt(ek, m, &r)?;
         Ok((k, c))
     }
@@ -231,10 +232,10 @@ impl ParamSet {
         let mut m_h = Bytes::new();
         m_h.accumulate_32(m_prime);
         m_h.accumulate(h);
-        let (mut k_prime, r_prime) = kem::g(&m_h)?;
+        let (mut k_prime, r_prime) = basics::g(&m_h)?;
         let mut z_c = Bytes::from(z);
         z_c.accumulate(ct.clone());
-        let k_bar = kem::j(&z_c)?;
+        let k_bar = basics::j(&z_c)?;
         let c_prime = self.k_pke_encrypt(&ek_pke, &m_prime, &r_prime)?;
         if c_prime != *ct {
             // Implicit rejection.
@@ -258,8 +259,8 @@ impl ParamSet {
         let mut ptr: usize = 0;
         for i in 0..self.k {
             let the_slice = &ek_slice[ptr..ptr + 384];
-            let dec = kem::byte_decode(&Bytes::from_bytes(the_slice), 12)?;
-            let enc = kem::byte_encode(&dec, 12)?;
+            let dec = basics::byte_decode(&Bytes::from_bytes(the_slice), 12)?;
+            let enc = basics::byte_encode(&dec, 12)?;
             if the_slice != enc.as_bytes() {
                 return Err(anyhow!("Subkey {i} mismatch {the_slice:?} != {enc:?}"));
             }
@@ -280,7 +281,7 @@ impl ParamSet {
         if d.len() != d_len {
             return Err(anyhow!("Expected d_k len {d_len}, got {}", d.len()));
         }
-        let test = kem::h(&d.interval(384 * (self.k as usize)..768 * (self.k as usize) + 32))?;
+        let test = basics::h(&d.interval(384 * (self.k as usize)..768 * (self.k as usize) + 32))?;
         let expect = d.interval(768 * (self.k as usize) + 32..768 * (self.k as usize) + 64);
         if test.as_bytes() != expect.as_bytes() {
             return Err(anyhow!("Hash test failed"));

@@ -1,7 +1,7 @@
 // Basic functions required by FIPS-203
 
 use crate::{
-    basics,
+    format,
     types::{Bits, Bytes, Bytes32, IntRange2To3},
 };
 use anyhow::{Result, anyhow};
@@ -147,13 +147,13 @@ pub fn byte_encode(values: &[u32], d: u8) -> Result<Bytes> {
             x_tmp >>= 1;
         }
     });
-    basics::bits_to_bytes(&Bits::from(some_bits))
+    format::bits_to_bytes(&Bits::from(some_bits))
 }
 
 // S4 4.2.1
 pub fn byte_decode(bits: &Bytes, d: u8) -> Result<[u32; 256]> {
     let mut result: [u32; 256] = [0; 256];
-    let bits = basics::bytes_to_bits(bits)?;
+    let bits = format::bytes_to_bits(bits)?;
     if bits.len() != usize::from(d) * 256 {
         return Err(anyhow!(
             "Expecting {} bits, got {}",
@@ -315,4 +315,3 @@ mod tests {
         assert_eq!(zeta_2(26), 2156);
     }
 }
-

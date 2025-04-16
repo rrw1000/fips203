@@ -1,4 +1,4 @@
-use crate::{basics, kem};
+use crate::{format, kem::basics};
 use anyhow::Result;
 
 pub fn ntt(f: &[u32; 256]) -> Result<[u32; 256]> {
@@ -7,13 +7,13 @@ pub fn ntt(f: &[u32; 256]) -> Result<[u32; 256]> {
     for len_bit in (1..=7).rev() {
         let len = 1 << len_bit;
         for start in (0..256).step_by(2 * len) {
-            let zeta = kem::zeta_mod(i);
+            let zeta = basics::zeta_mod(i);
             i += 1;
             for j in start..(start + len) {
                 // @todo can probably remove some of the mods here, but 2 log_2 Q = 24, so not many.
-                let t = (zeta * f_hat[j + len]) % kem::Q;
-                f_hat[j + len] = basics::sub_mod(f_hat[j], t, kem::Q);
-                f_hat[j] = (f_hat[j] + t) % kem::Q;
+                let t = (zeta * f_hat[j + len]) % basics::Q;
+                f_hat[j + len] = format::sub_mod(f_hat[j], t, basics::Q);
+                f_hat[j] = (f_hat[j] + t) % basics::Q;
             }
         }
     }
@@ -26,16 +26,16 @@ pub fn inv_ntt(f_hat: &[u32; 256]) -> Result<[u32; 256]> {
     for len_bit in 1..=7 {
         let len = 1 << len_bit;
         for start in (0..256).step_by(2 * len) {
-            let zeta = kem::zeta_mod(i);
+            let zeta = basics::zeta_mod(i);
             i -= 1;
             for j in start..(start + len) {
                 let t = f[j];
-                f[j] = (t + f[j + len]) % kem::Q;
-                f[j + len] = (zeta * basics::sub_mod(f[j + len], t, kem::Q)) % kem::Q;
+                f[j] = (t + f[j + len]) % basics::Q;
+                f[j + len] = (zeta * format::sub_mod(f[j + len], t, basics::Q)) % basics::Q;
             }
         }
     }
-    f.iter_mut().for_each(|x| *x = (*x * 3303) % kem::Q);
+    f.iter_mut().for_each(|x| *x = (*x * 3303) % basics::Q);
     Ok(f)
 }
 
@@ -79,7 +79,7 @@ mod tests {
             // Some NTTs twist on transform, so you need to do it twice to get the original.
             let mut f: [u32; 256] = [0; 256];
             for g in f.iter_mut() {
-                *g = rng.next_u32() % kem::Q;
+                *g = rng.next_u32() % basics::Q;
             }
             let f_hat = ntt(&f).unwrap();
             let f_prime = inv_ntt(&f_hat).unwrap();

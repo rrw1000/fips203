@@ -8,7 +8,7 @@ This is an implementation of the FIPS-203 post-quantum key encapsulation algorit
 Spec: https://csrc.nist.gov/pubs/fips/203/final \
 Static test vectors: https://github.com/usnistgov/ACVP-Server/tree/master/gen-val/json-files \
 Static test vectors with intermediate values: https://github.com/C2SP/CCTV \
-Reference implementation: https://github.com/pq-crystals/kyber.git \
+Reference implementation for FIPS203/KEM: https://github.com/pq-crystals/kyber.git \
 
 ## Running long-running tests
 
