@@ -26,3 +26,12 @@ cargo test vectors -- --ignored
 
 I did try `#cfg()` , but this requires `profile-rustflags` support in cargo, which is not yet (1.86) stable.
 
+## Things to do
+
+Things to do in future:
+
+  * Polynomials should have their own type aliases.
+  * Profile and speed up.
+  * Accumulate currently doesn't, really - it copies; we should make it reuse storage if faster (it may not - in fact, probably isn't - faster)
+  * BytesToBits and BitsToBytes could probably be faster (but does this make a difference in practice?)
+  K
