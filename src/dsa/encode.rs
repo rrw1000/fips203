@@ -30,7 +30,7 @@ pub fn pk_decode(pk: &Bytes, bitlen: u32) -> Result<(Bytes32, Vec<[u32; 256]>)> 
     Ok((p, t1))
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct SK {
     p: Bytes32,
     big_k: Bytes32,
@@ -72,6 +72,8 @@ pub fn sk_decode(encoded: &Bytes, n: u32, d: u32, k: u32, l: u32) -> Result<SK> 
     result.p = Bytes32::try_from(&byte_slice[0..32])?;
     result.big_k = Bytes32::try_from(&byte_slice[32..64])?;
     result.tr = Bytes::from_bytes(&byte_slice[64..128]);
+    result.n = n;
+    result.d = d;
     // Hopefully this will be constant-propagated by the compiler, so it's really
     // just handy readability sugar.
     let mut offset = 128;
@@ -124,5 +126,43 @@ mod tests {
         let (dec_p, dec_t1) = pk_decode(&coded, 5).unwrap();
         assert_eq!(p, dec_p);
         assert_eq!(t1, dec_t1);
+    }
+
+    #[test]
+    fn test_sk_encoding() {
+        let p =
+            Bytes32::from_hex("a58866d2974b947eaee704c6b4b623c0847255df5738603d36f6ab4772bb9ccb")
+                .unwrap();
+        let big_k =
+            Bytes32::from_hex("29cc48f65c9980b7be57b3fe8e54f3fb90d76c2d8df1281ce52a9ed617d94525")
+                .unwrap();
+        let tr = Bytes::from_hex(
+            "29cc48f65c9980b7be57b3fe8e54f3fb90d76c2d8df1281ce52a9ed617d94525f1abf1b151cce457765bd958d09d698783422ef375fce67874dddab649e05202",
+        ).unwrap();
+        // ML-DSA-44
+        let n = 2;
+        let d = 13;
+        let k = 4;
+        let l = 4;
+        // l vectors with coeffs in -n .. n
+        let s1 = vec![[1; 256], [2; 256], [-1; 256], [0; 256]];
+        // k vectors with coeffs in -n .. n
+        let s2 = vec![[0; 256], [2; 256], [-2; 256], [0; 256]];
+        // k vectors with coeffs in -2^13+1 .. 2^13
+        // 2^13 = 8192
+        let t0 = vec![[4095; 256], [-3128; 256], [0; 256], [456; 256]];
+        let sk_in = SK {
+            p,
+            big_k,
+            tr,
+            s1,
+            s2,
+            t0,
+            n,
+            d,
+        };
+        let encoded = sk_encode(&sk_in).unwrap();
+        let decoded = sk_decode(&encoded, n, d, k, l).unwrap();
+        assert_eq!(sk_in, decoded);
     }
 }

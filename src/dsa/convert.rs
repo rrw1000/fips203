@@ -112,7 +112,7 @@ pub fn bit_unpack(v: &[u8], a: u32, b: u32) -> Result<[i32; 256]> {
     Ok(result)
 }
 
-pub fn hint_bit_pack(v: &Vec<[i32; 256]>, w: u32) -> Bytes {
+pub fn hint_bit_pack(v: &[[i32; 256]], w: u32) -> Bytes {
     let mut result = Bytes::default();
     let vec = result.as_vec_mut();
     let k = v.len();
