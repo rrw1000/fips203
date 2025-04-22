@@ -38,7 +38,7 @@ pub fn sample_ntt(b: &Bytes) -> Result<[u32; 256]> {
 }
 
 // S4.2.2
-pub fn sample_poly_cbd(b: &Bytes, n: IntRange2To3) -> Result<[u32; 256]> {
+pub fn sample_poly_cbd(b: &[u8], n: IntRange2To3) -> Result<[u32; 256]> {
     let mut f: [u32; 256] = [0; 256];
     let n_value: usize = n.value().try_into()?;
     let expected_len = n_value * 64;
@@ -131,7 +131,7 @@ mod tests {
             3328, 3328, 0, 3328, 0, 0, 1, 2, 0, 0,
         ];
 
-        let sampled = sample_poly_cbd(&test_bytes, IntRange2To3::Two).unwrap();
+        let sampled = sample_poly_cbd(test_bytes.as_bytes(), IntRange2To3::Two).unwrap();
         assert_eq!(expect_sampled_regress, sampled);
     }
 }

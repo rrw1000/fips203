@@ -50,9 +50,9 @@ pub fn zeta_mod(i: u32) -> u32 {
 }
 
 /// S4.1 PRF
-pub fn prf(n: IntRange2To3, s: &Bytes32, b: u8) -> Bytes {
+pub fn prf(n: IntRange2To3, s: &[u8; 32], b: u8) -> Bytes {
     let mut hasher = Shake256::default();
-    hasher.update(s.as_bytes());
+    hasher.update(s);
     hasher.update(&[b]);
     // 8 * 64 * n bits = 64*2 or 64*3
     match n {
@@ -70,26 +70,26 @@ pub fn prf(n: IntRange2To3, s: &Bytes32, b: u8) -> Bytes {
 }
 
 /// S4.1 H
-pub fn h(s: &Bytes) -> Result<Bytes32> {
+pub fn h(s: &[u8]) -> Result<Bytes32> {
     let mut hasher = Sha3_256::new();
-    Update::update(&mut hasher, s.as_bytes());
+    Update::update(&mut hasher, s);
     let rv = hasher.finalize();
     Bytes32::try_from(rv.as_slice())
 }
 
 /// S4.1 J
-pub fn j(s: &Bytes) -> Result<Bytes32> {
+pub fn j(s: &[u8]) -> Result<Bytes32> {
     let mut hasher = Shake256::default();
-    hasher.update(s.as_bytes());
+    hasher.update(s);
     let mut output = [0u8; 32];
     hasher.finalize_xof_into(&mut output);
     Ok(Bytes32::new(output))
 }
 
 /// S4 1.G
-pub fn g(s: &Bytes) -> Result<(Bytes32, Bytes32)> {
+pub fn g(s: &[u8]) -> Result<(Bytes32, Bytes32)> {
     let mut hasher = Sha3_512::new();
-    Update::update(&mut hasher, s.as_bytes());
+    Update::update(&mut hasher, s);
     let rv: [u8; 64] = hasher.finalize().as_slice().try_into()?;
     Ok((
         Bytes32::try_from(&rv[0..32])?,
@@ -151,7 +151,7 @@ pub fn byte_encode(values: &[u32], d: u8) -> Result<Bytes> {
 }
 
 // S4 4.2.1
-pub fn byte_decode(bits: &Bytes, d: u8) -> Result<[u32; 256]> {
+pub fn byte_decode(bits: &[u8], d: u8) -> Result<[u32; 256]> {
     let mut result: [u32; 256] = [0; 256];
     let bits = format::bytes_to_bits(bits)?;
     if bits.len() != usize::from(d) * 256 {
@@ -196,8 +196,8 @@ mod tests {
         test_bytes_mod_12[1] = test_bytes[1] % Q;
         let encoded_6 = byte_encode(&test_bytes, 6).unwrap();
         let encoded_12 = byte_encode(&test_bytes, 12).unwrap();
-        let decoded_6 = byte_decode(&encoded_6, 6).unwrap();
-        let decoded_12 = byte_decode(&encoded_12, 12).unwrap();
+        let decoded_6 = byte_decode(&encoded_6.as_bytes(), 6).unwrap();
+        let decoded_12 = byte_decode(&encoded_12.as_bytes(), 12).unwrap();
         assert_eq!(decoded_6, test_bytes_mod_6);
         assert_eq!(decoded_12, test_bytes_mod_12);
     }
@@ -251,7 +251,7 @@ mod tests {
         let some_bytes = expected_output.as_bytes();
         let expect_left = Bytes32::try_from(&some_bytes[0..32]).unwrap();
         let expect_right = Bytes32::try_from(&some_bytes[32..64]).unwrap();
-        let (left, right) = g(&test_input).unwrap();
+        let (left, right) = g(&test_input.as_bytes()).unwrap();
         assert_eq!(expect_left, left);
         assert_eq!(expect_right, right);
     }
@@ -262,7 +262,7 @@ mod tests {
         let expected_output =
             Bytes32::from_hex("b4c117f00bb0ebfadcdcf9e7aff1cbf0bf44e5c6f0eec5686e29d0c25e72cd85")
                 .unwrap();
-        assert_eq!(expected_output, j(&test_input).unwrap());
+        assert_eq!(expected_output, j(&test_input.as_bytes()).unwrap());
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
         let expected_output =
             Bytes32::from_hex("cb86ad64b294f4ace98d08c736752476e6c033b5e54bee859f8ec168bb3d53d5")
                 .unwrap();
-        assert_eq!(expected_output, h(&test_input).unwrap());
+        assert_eq!(expected_output, h(&test_input.as_bytes()).unwrap());
     }
 
     #[test]
@@ -279,7 +279,7 @@ mod tests {
         let test32 =
             Bytes32::from_hex("b721ec76c0a4fc36969438de2908446f4e189f47f286411b109e8cda786d07d1")
                 .unwrap();
-        let result_2 = prf(IntRange2To3::Two, &test32, 0x78);
+        let result_2 = prf(IntRange2To3::Two, &test32.as_bytes(), 0x78);
         let cmp_2 = Bytes::from_hex(
             "291f9389b72dffdab2ee42d4d28f960d3532b4ae78d3a7324fa428ae5896ec46f1c1f1967c7a14d67d06501b7167fa81fc8a9\
              ccaaaa2c93a2a973648e46dc363125ab579d15a9dc0b86f9f1eb47da73b4298b5e06785db53ae607b4a66f9c68464832e0db5\
@@ -287,7 +287,7 @@ mod tests {
         ).unwrap();
         assert_eq!(cmp_2, result_2);
 
-        let result_3 = prf(IntRange2To3::Three, &test32, 0x40);
+        let result_3 = prf(IntRange2To3::Three, &test32.as_bytes(), 0x40);
         let cmp_3 = Bytes::from_hex("dd2b2ffec4eb0e21ab994c3c6a4f45e10975688927fdbeaac224ce3e94b4719c18451e29ecabd25\
                                      6a6fdc7d2731f595f67105d35bfdc9cf4ebc9a21ac5d4054812256b3d73587a9df1dabd14ceeef7\
                                      cc45a3e052e89839e3e6fc352c01852da6972e3de3bd871db12121bac870bb0219c82a6828c9dfc\

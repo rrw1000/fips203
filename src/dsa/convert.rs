@@ -89,7 +89,7 @@ pub fn bit_pack(w: &[i32; 256], a: u32, b: u32) -> Result<Bytes> {
     format::bits_to_bytes(&z)
 }
 
-pub fn simple_bit_unpack(b: u32, v: &Bytes) -> Result<[u32; 256]> {
+pub fn simple_bit_unpack(b: u32, v: &[u8]) -> Result<[u32; 256]> {
     let mut result: [u32; 256] = [0; 256];
     let nr_bits = bitlen(b);
     let z = format::bytes_to_bits(v)?;
@@ -100,7 +100,7 @@ pub fn simple_bit_unpack(b: u32, v: &Bytes) -> Result<[u32; 256]> {
     Ok(result)
 }
 
-pub fn bit_unpack(v: &Bytes, a: u32, b: u32) -> Result<[i32; 256]> {
+pub fn bit_unpack(v: &[u8], a: u32, b: u32) -> Result<[i32; 256]> {
     let mut result: [i32; 256] = [0; 256];
     let c = bitlen(a + b);
     let z = format::bytes_to_bits(v)?;
@@ -130,27 +130,26 @@ pub fn hint_bit_pack(v: &Vec<[i32; 256]>, w: u32) -> Bytes {
     result
 }
 
-pub fn hint_bit_unpack(y: &Bytes, w: u32) -> Option<Vec<[i32; 256]>> {
+pub fn hint_bit_unpack(y: &[u8], w: u32) -> Option<Vec<[i32; 256]>> {
     // First, recover k.
     let k = y.len() - (w as usize);
-    let y_slice = y.as_bytes();
     let mut result: Vec<[i32; 256]> = vec![[0; 256]; k];
     let mut index = 0;
     for (i, v) in result.iter_mut().enumerate() {
-        if y_slice[(w as usize) + i] < index || y_slice[(w as usize) + i] > (w as u8) {
+        if y[(w as usize) + i] < index || y[(w as usize) + i] > (w as u8) {
             return None;
         }
         let first = index;
-        while index < y_slice[(w as usize) + i] {
-            if index > first && y_slice[(index as usize) - 1] >= y_slice[index as usize] {
+        while index < y[(w as usize) + i] {
+            if index > first && y[(index as usize) - 1] >= y[index as usize] {
                 return None;
             }
-            v[y_slice[index as usize] as usize] = 1;
+            v[y[index as usize] as usize] = 1;
             index += 1;
         }
     }
     for i in (index as usize)..((w - 1) as usize) {
-        if y_slice[i] != 0 {
+        if y[i] != 0 {
             return None;
         }
     }
@@ -198,7 +197,7 @@ mod tests {
         // regression test.
         let expected = Bytes::from_hex("2dc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc3300cc330").unwrap();
         assert_eq!(expected, result);
-        let unpacked = simple_bit_unpack(46, &result).unwrap();
+        let unpacked = simple_bit_unpack(46, &result.as_bytes()).unwrap();
         assert_eq!(r, unpacked);
     }
 
@@ -209,7 +208,7 @@ mod tests {
         r[1] = 56;
         r[2] = -19;
         let packed = bit_pack(&r, 20, 58).unwrap();
-        let unpacked = bit_unpack(&packed, 20, 58).unwrap();
+        let unpacked = bit_unpack(&packed.as_bytes(), 20, 58).unwrap();
         assert_eq!(r, unpacked)
     }
 
@@ -230,7 +229,7 @@ mod tests {
         v[7][14] = 1;
         v[8][2] = 1;
         let packed = hint_bit_pack(&v, 16);
-        let unpacked = hint_bit_unpack(&packed, 16).unwrap();
+        let unpacked = hint_bit_unpack(&packed.as_bytes(), 16).unwrap();
         assert_eq!(v, unpacked);
     }
 }

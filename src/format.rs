@@ -51,9 +51,9 @@ pub fn bits_to_bytes(b: &Bits) -> Result<Bytes> {
 }
 
 /// S4 4.2.1
-pub fn bytes_to_bits(b: &Bytes) -> Result<Bits> {
+pub fn bytes_to_bits(b: &[u8]) -> Result<Bits> {
     let mut result: Vec<u8> = Vec::new();
-    b.as_vec().iter().for_each(|x| {
+    b.iter().for_each(|x| {
         let mut val = *x;
         for _ in 0..8 {
             result.push(val & 1);
@@ -79,7 +79,10 @@ mod tests {
     fn test_bytes_to_bits() {
         let expected_output = Bits::from_bitstring("0100111101101001").unwrap();
         let test_input = Bytes::from_hex("f296").unwrap();
-        assert_eq!(expected_output, bytes_to_bits(&test_input).unwrap());
+        assert_eq!(
+            expected_output,
+            bytes_to_bits(&test_input.as_bytes()).unwrap()
+        );
     }
 
     #[test]

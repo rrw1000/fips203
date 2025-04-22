@@ -60,12 +60,12 @@ impl ParamSet {
     }
 
     /// Purely internal keygen function. Returns (ek,dk)
-    fn k_pke_keygen(&self, d: &Bytes32) -> Result<(Bytes, Bytes)> {
+    fn k_pke_keygen(&self, d: &[u8; 32]) -> Result<(Bytes, Bytes)> {
         let mut random_bytes = Bytes::new();
-        random_bytes.as_vec_mut().extend_from_slice(d.as_bytes());
+        random_bytes.as_vec_mut().extend_from_slice(d);
         // We know it fits because max k == 4
         random_bytes.as_vec_mut().push(self.k as u8);
-        let (p, sigma) = basics::g(&random_bytes)?;
+        let (p, sigma) = basics::g(&random_bytes.as_bytes())?;
         let mut big_n = 0;
         let mut a_matrix = matrix::SquareMatrix::new(self.k);
         for i in 0..self.k {
@@ -82,7 +82,10 @@ impl ParamSet {
         for i in 0..self.k {
             s.set(
                 i,
-                &sample::sample_poly_cbd(&basics::prf(self.n1, &sigma, big_n), self.n1)?,
+                &sample::sample_poly_cbd(
+                    &basics::prf(self.n1, &sigma.as_bytes(), big_n).as_bytes(),
+                    self.n1,
+                )?,
             );
             big_n += 1;
         }
@@ -90,7 +93,10 @@ impl ParamSet {
         for i in 0..self.k {
             e.set(
                 i,
-                &sample::sample_poly_cbd(&basics::prf(self.n1, &sigma, big_n), self.n1)?,
+                &sample::sample_poly_cbd(
+                    &basics::prf(self.n1, &sigma.as_bytes(), big_n).as_bytes(),
+                    self.n1,
+                )?,
             );
             big_n += 1;
         }
@@ -110,18 +116,17 @@ impl ParamSet {
         Ok((ek_pke, dk_pke))
     }
 
-    fn k_pke_encrypt(&self, ek: &Bytes, m: &Bytes32, r: &Bytes32) -> Result<Bytes> {
+    fn k_pke_encrypt(&self, ek: &[u8], m: &[u8], r: &[u8; 32]) -> Result<Bytes> {
         let mut big_n = 0;
         let mut ek_pos = 0;
-        let ek_slice = ek.as_bytes();
         let mut t_hat = matrix::Vector::new(self.k);
         for i in 0..self.k {
             // @todo clean this up - needless copying.
-            let b_val = Bytes::from_bytes(&ek_slice[ek_pos..ek_pos + 384]);
+            let b_val = &ek[ek_pos..ek_pos + 384];
             t_hat.set(i, &basics::byte_decode(&b_val, 12)?);
             ek_pos += 384;
         }
-        let p = Bytes::from_bytes(&ek_slice[ek_pos..ek_pos + 32]);
+        let p = Bytes::from_bytes(&ek[ek_pos..ek_pos + 32]);
 
         let mut a_hat_matrix = matrix::SquareMatrix::new(self.k);
         for i in 0..self.k {
@@ -137,7 +142,7 @@ impl ParamSet {
         for i in 0..self.k {
             y.set(
                 i,
-                &sample::sample_poly_cbd(&basics::prf(self.n1, r, big_n), self.n1)?,
+                &sample::sample_poly_cbd(&basics::prf(self.n1, r, big_n).as_bytes(), self.n1)?,
             );
             big_n += 1;
         }
@@ -145,16 +150,16 @@ impl ParamSet {
         for i in 0..self.k {
             e1.set(
                 i,
-                &sample::sample_poly_cbd(&basics::prf(self.n2, r, big_n), self.n2)?,
+                &sample::sample_poly_cbd(&basics::prf(self.n2, r, big_n).as_bytes(), self.n2)?,
             );
             big_n += 1;
         }
-        let e2 = sample::sample_poly_cbd(&basics::prf(self.n2, r, big_n), self.n2)?;
+        let e2 = sample::sample_poly_cbd(&basics::prf(self.n2, r, big_n).as_bytes(), self.n2)?;
         let y_hat = y.ntt()?;
         let mut u = a_hat_matrix.compose_transpose_hat(&y_hat)?;
         u = u.inv_ntt()?;
         u.accumulate(&e1)?;
-        let mu = basics::decompress_poly(basics::byte_decode(&Bytes::from(m), 1)?, 1);
+        let mu = basics::decompress_poly(basics::byte_decode(m, 1)?, 1);
         let mut v = t_hat.compose_transpose(&y_hat)?;
         v = ntt::inv_ntt(&v)?;
         format::accumulate_vec(&mut v, &e2, basics::Q);
@@ -169,7 +174,7 @@ impl ParamSet {
         Ok(c1)
     }
 
-    fn k_pke_decrypt(&self, dk: &Bytes, c: &Bytes) -> Result<Bytes32> {
+    fn k_pke_decrypt(&self, dk: &[u8], c: &[u8]) -> Result<Bytes32> {
         let expected_dk_len = (384 * self.k) as usize;
         let expected_c_len = 32 * ((self.du as usize) * (self.k as usize) + (self.dv as usize));
         if dk.len() != expected_dk_len {
@@ -185,11 +190,8 @@ impl ParamSet {
             ));
         }
         let (u_prime, tail) = matrix::Vector::decompress_from(c, self.k, self.du)?;
-        let c2 = &c.as_bytes()[tail..];
-        let v_prime = basics::decompress_poly(
-            basics::byte_decode(&Bytes::from_bytes(c2), self.dv)?,
-            self.dv,
-        );
+        let c2 = &c[tail..];
+        let v_prime = basics::decompress_poly(basics::byte_decode(&c2, self.dv)?, self.dv);
         let s_hat = matrix::Vector::decode_from(dk, 12, self.k)?;
         let ntt_u_prime = u_prime.ntt()?;
         let tmp_0 = s_hat.compose_transpose(&ntt_u_prime)?;
@@ -201,45 +203,45 @@ impl ParamSet {
     }
 
     /// Alg 16 ; returns (ek,dk)
-    fn keygen_internal(&self, d: &Bytes32, v: &Bytes32) -> Result<(Bytes, Bytes)> {
+    fn keygen_internal(&self, d: &[u8; 32], v: &[u8; 32]) -> Result<(Bytes, Bytes)> {
         let (ek_pke, dk_pke) = self.k_pke_keygen(d)?;
         let mut dk = Bytes::new();
         dk.accumulate(dk_pke);
         dk.accumulate(ek_pke.clone());
-        dk.accumulate_32(basics::h(&ek_pke)?);
-        dk.accumulate_32(*v);
+        dk.accumulate_32(basics::h(&ek_pke.as_bytes())?);
+        dk.append_slice(v);
         Ok((ek_pke, dk))
     }
 
     /// Alg 17: encaps_internal
     /// Returns (key, ciphertext)
-    fn encaps_internal(&self, ek: &Bytes, m: &Bytes32) -> Result<(Bytes32, Bytes)> {
+    fn encaps_internal(&self, ek: &[u8], m: &[u8; 32]) -> Result<(Bytes32, Bytes)> {
         let mut mek = Bytes::from(m);
         mek.accumulate_32(basics::h(ek)?);
-        let (k, r) = basics::g(&mek)?;
-        let c = self.k_pke_encrypt(ek, m, &r)?;
+        let (k, r) = basics::g(&mek.as_bytes())?;
+        let c = self.k_pke_encrypt(ek, m, &r.as_bytes())?;
         Ok((k, c))
     }
 
     /// Alg 18: decaps_internal
     /// Returns the shared secret key
-    fn decaps_internal(&self, dk: &Bytes, ct: &Bytes) -> Result<Bytes32> {
+    fn decaps_internal(&self, dk: &[u8], ct: &[u8]) -> Result<Bytes32> {
         // Write these out to avoid value dependencies on the indices.
         let k = self.k as usize;
-        let dk_pke = dk.interval(0..384 * k);
-        let ek_pke = dk.interval(384 * k..768 * k + 32);
-        let h = dk.interval(768 * k + 32..768 * k + 64);
-        let z = dk.interval(768 * k + 64..768 * k + 96);
+        let dk_pke = &dk[0..384 * k];
+        let ek_pke = &dk[384 * k..768 * k + 32];
+        let h = &dk[768 * k + 32..768 * k + 64];
+        let z = &dk[768 * k + 64..768 * k + 96];
         let m_prime = self.k_pke_decrypt(&dk_pke, &ct)?;
         let mut m_h = Bytes::new();
         m_h.accumulate_32(m_prime);
-        m_h.accumulate(h);
-        let (mut k_prime, r_prime) = basics::g(&m_h)?;
+        m_h.append_slice(h);
+        let (mut k_prime, r_prime) = basics::g(&m_h.as_bytes())?;
         let mut z_c = Bytes::from(z);
-        z_c.accumulate(ct.clone());
-        let k_bar = basics::j(&z_c)?;
-        let c_prime = self.k_pke_encrypt(&ek_pke, &m_prime, &r_prime)?;
-        if c_prime != *ct {
+        z_c.append_slice(ct);
+        let k_bar = basics::j(&z_c.as_bytes())?;
+        let c_prime = self.k_pke_encrypt(&ek_pke, m_prime.as_slice(), &r_prime.as_bytes())?;
+        if c_prime.as_bytes() != ct {
             // Implicit rejection.
             k_prime = k_bar;
         }
@@ -247,7 +249,7 @@ impl ParamSet {
     }
 
     /// Returns: (key, ciphertext)
-    pub fn encaps(&self, ek: &Bytes, m: &Bytes32) -> Result<(Bytes32, Bytes)> {
+    pub fn encaps(&self, ek: &[u8], m: &[u8; 32]) -> Result<(Bytes32, Bytes)> {
         // Type check
         let key_len = (384 * self.k) as usize;
         if ek.len() != key_len + 32 {
@@ -257,11 +259,10 @@ impl ParamSet {
                 ek.len()
             ));
         }
-        let ek_slice = ek.as_bytes();
         let mut ptr: usize = 0;
         for i in 0..self.k {
-            let the_slice = &ek_slice[ptr..ptr + 384];
-            let dec = basics::byte_decode(&Bytes::from_bytes(the_slice), 12)?;
+            let the_slice = &ek[ptr..ptr + 384];
+            let dec = basics::byte_decode(the_slice, 12)?;
             let enc = basics::byte_encode(&dec, 12)?;
             if the_slice != enc.as_bytes() {
                 return Err(anyhow!("Subkey {i} mismatch {the_slice:?} != {enc:?}"));
@@ -271,7 +272,7 @@ impl ParamSet {
         self.encaps_internal(ek, m)
     }
 
-    pub fn decaps(&self, d: &Bytes, c: &Bytes) -> Result<Bytes32> {
+    pub fn decaps(&self, d: &[u8], c: &[u8]) -> Result<Bytes32> {
         let c_len = 32 * ((self.du as usize) * (self.k as usize) + (self.dv as usize));
         if c.len() != c_len {
             return Err(anyhow!(
@@ -283,16 +284,16 @@ impl ParamSet {
         if d.len() != d_len {
             return Err(anyhow!("Expected d_k len {d_len}, got {}", d.len()));
         }
-        let test = basics::h(&d.interval(384 * (self.k as usize)..768 * (self.k as usize) + 32))?;
-        let expect = d.interval(768 * (self.k as usize) + 32..768 * (self.k as usize) + 64);
-        if test.as_bytes() != expect.as_bytes() {
+        let test = basics::h(&d[384 * (self.k as usize)..768 * (self.k as usize) + 32])?;
+        let expect = &d[768 * (self.k as usize) + 32..768 * (self.k as usize) + 64];
+        if test.as_bytes() != expect {
             return Err(anyhow!("Hash test failed"));
         }
         self.decaps_internal(d, c)
     }
 
     // Somewhat pointless, but the standard does it, so we should too :-)
-    pub fn keygen(&self, d: &Bytes32, z: &Bytes32) -> Result<KeyPair> {
+    pub fn keygen(&self, d: &[u8; 32], z: &[u8; 32]) -> Result<KeyPair> {
         let (ek, dk) = self.keygen_internal(d, z)?;
         Ok(KeyPair {
             public_enc: ek,
@@ -351,13 +352,17 @@ mod tests {
             "5a645120b878936d202efc4851f38e6bb6573c3b14b0b9bb44bf372d8b1aa8034a9f1a1584076f0a38e89a9d49a50b792ace7584981be8e239272deef914418fefe2dad97dc0ec20cfe8a9599b9bbe3ecce91f97e10cd9ef2c4950e3ea3c46fe481eb0d24878c4624ad344f0dc9863e7d170937a8cecc6f7d00f9565529d572959cc49d0f7042ff43b7d1d71efd22f2654e14e78c31f34a26ae53b067ae0380a65a732459503da5e9406d50a70e3d5ebdbf3c9c01cad1cc001ebe69e6cff20e64ce5c802b691587e404cf6efa2799a2ffd353492a75f0e2ea52a974e0545a086a3bd14b69045238140a7200b10c3276cc6b2a67c173f7c1ad64545adb8ebdf7835e9aa1f54f6891369988f3625c45f2fec8d9a07b911d32ba69d9ff5d74f10a6808b25a3c81709945bf213c3450d74481f065042186b0d36fb55271162dfaf41e516a408f83ccabe8a0ba7effa16f88f6d7dbdb64e608c8f18d686c7e5d548d737116fa562dc76e7994a86374a9c85b8b17c4f025fa23a4de1a997a87e5a65f5c5386772491fd8d10731f5f5aa60366ffe3fd209cb7b7a8615320ad0728f41e812bd88d2d6104753917e89e1ca0f10177cf5dab040e466908b27446215709b0912972c428c4d9aad9432d9a159069c96154001cb0be4de597e9871b04bddaa4539f838bc12ab0a3ea7e8c8481bcdfcc1834369fcf061f7c599efdc4f6c434102991446aea12881e163fd4ee6c458b82e42759f8b11b0612c12d5a777acf4c7cdd26fb7da0b9098dc4af94704daa529945ab169cdb22d3966fcd26950e2418cac9bc7dc32c4a604f368f0f8a9c7ddce8b5e476b26b33116d607df1b49c205ada0d2ea5a5a64eecb22549ddf18a0daed2e5d44cb6174b9781236eee11f95ab0c45836bcafc73af3bec11440bc1c605669eb019cfac0097943cf29bbffce0f823293da623e5fa6d2a7ee0c7b4507596a62ef46bbe4e1b63cc96ba9878a7b39f84b59dd336f1659a24cbb33015d515e9e80e3e7902b1d583f8ee97153cd8ba1fadeb9ee7e2f2c23dfee85a50d5c3554b79922a4537d6dc4f09418dfdd744596cbf68",
         );
         let ml_kem_512 = ParamSet::ml_kem_512();
-        let r = ml_kem_512.keygen(&t.d, &t.z).unwrap();
+        let r = ml_kem_512.keygen(&t.d.as_bytes(), &t.z.as_bytes()).unwrap();
         assert_eq!(t.ek, r.public_enc);
         assert_eq!(t.dk, r.private_dec);
-        let (key, ct) = ml_kem_512.encaps(&t.ek, &t.m).unwrap();
+        let (key, ct) = ml_kem_512
+            .encaps(&t.ek.as_bytes(), &t.m.as_bytes())
+            .unwrap();
         assert_eq!(t.secret, key);
         assert_eq!(t.ct, ct);
-        let decaps_key = ml_kem_512.decaps(&r.private_dec, &ct).unwrap();
+        let decaps_key = ml_kem_512
+            .decaps(&r.private_dec.as_bytes(), &ct.as_bytes())
+            .unwrap();
         assert_eq!(key, decaps_key);
     }
 
@@ -372,21 +377,27 @@ mod tests {
         for (idx, t) in vec.iter().enumerate() {
             eprintln!("768: Test case {idx}");
             let ml_kem_768 = ParamSet::ml_kem_768();
-            let r = ml_kem_768.keygen(&t.d, &t.z).unwrap();
+            let r = ml_kem_768.keygen(&t.d.as_bytes(), &t.z.as_bytes()).unwrap();
             assert_eq!(t.ek, r.public_enc);
             assert_eq!(t.dk, r.private_dec);
-            let (key, ct) = ml_kem_768.encaps(&t.ek, &t.m).unwrap();
+            let (key, ct) = ml_kem_768
+                .encaps(&t.ek.as_bytes(), &t.m.as_bytes())
+                .unwrap();
             assert_eq!(t.secret, key);
             assert_eq!(t.ct, ct);
-            let decaps_key = ml_kem_768.decaps(&r.private_dec, &ct).unwrap();
+            let decaps_key = ml_kem_768
+                .decaps(&r.private_dec.as_bytes(), &ct.as_bytes())
+                .unwrap();
             assert_eq!(key, decaps_key);
             // Corrupt the ciphertext and check that we get an implicit reject.
             let mut bad_ct = ct.clone();
             bad_ct.as_vec_mut()[0] ^= 1;
-            let bad_decaps_key = ml_kem_768.decaps(&r.private_dec, &bad_ct).unwrap();
+            let bad_decaps_key = ml_kem_768
+                .decaps(&r.private_dec.as_bytes(), &bad_ct.as_bytes())
+                .unwrap();
             assert_ne!(key, bad_decaps_key);
             let known_bad_decaps_key = ml_kem_768
-                .decaps(&r.private_dec, &t.implicit_reject_ct)
+                .decaps(&r.private_dec.as_bytes(), &t.implicit_reject_ct.as_bytes())
                 .unwrap();
             assert_eq!(t.implicit_reject, known_bad_decaps_key);
         }
@@ -400,21 +411,29 @@ mod tests {
         for (idx, t) in vec.iter().enumerate() {
             eprintln!("1024: Test case {idx}");
             let ml_kem_1024 = ParamSet::ml_kem_1024();
-            let r = ml_kem_1024.keygen(&t.d, &t.z).unwrap();
+            let r = ml_kem_1024
+                .keygen(&t.d.as_bytes(), &t.z.as_bytes())
+                .unwrap();
             assert_eq!(t.ek, r.public_enc);
             assert_eq!(t.dk, r.private_dec);
-            let (key, ct) = ml_kem_1024.encaps(&t.ek, &t.m).unwrap();
+            let (key, ct) = ml_kem_1024
+                .encaps(&t.ek.as_bytes(), &t.m.as_bytes())
+                .unwrap();
             assert_eq!(t.secret, key);
             assert_eq!(t.ct, ct);
-            let decaps_key = ml_kem_1024.decaps(&r.private_dec, &ct).unwrap();
+            let decaps_key = ml_kem_1024
+                .decaps(&r.private_dec.as_bytes(), &ct.as_bytes())
+                .unwrap();
             assert_eq!(key, decaps_key);
             // Corrupt the ciphertext and check that we get an implicit reject.
             let mut bad_ct = ct.clone();
             bad_ct.as_vec_mut()[0] ^= 1;
-            let bad_decaps_key = ml_kem_1024.decaps(&r.private_dec, &bad_ct).unwrap();
+            let bad_decaps_key = ml_kem_1024
+                .decaps(&r.private_dec.as_bytes(), &bad_ct.as_bytes())
+                .unwrap();
             assert_ne!(key, bad_decaps_key);
             let known_bad_decaps_key = ml_kem_1024
-                .decaps(&r.private_dec, &t.implicit_reject_ct)
+                .decaps(&r.private_dec.as_bytes(), &t.implicit_reject_ct.as_bytes())
                 .unwrap();
             assert_eq!(t.implicit_reject, known_bad_decaps_key);
         }
@@ -428,21 +447,27 @@ mod tests {
         for (idx, t) in vec.iter().enumerate() {
             eprintln!("512: Test case {idx}");
             let ml_kem_512 = ParamSet::ml_kem_512();
-            let r = ml_kem_512.keygen(&t.d, &t.z).unwrap();
+            let r = ml_kem_512.keygen(&t.d.as_bytes(), &t.z.as_bytes()).unwrap();
             assert_eq!(t.ek, r.public_enc);
             assert_eq!(t.dk, r.private_dec);
-            let (key, ct) = ml_kem_512.encaps(&t.ek, &t.m).unwrap();
+            let (key, ct) = ml_kem_512
+                .encaps(&t.ek.as_bytes(), &t.m.as_bytes())
+                .unwrap();
             assert_eq!(t.secret, key);
             assert_eq!(t.ct, ct);
-            let decaps_key = ml_kem_512.decaps(&r.private_dec, &ct).unwrap();
+            let decaps_key = ml_kem_512
+                .decaps(&r.private_dec.as_bytes(), &ct.as_bytes())
+                .unwrap();
             assert_eq!(key, decaps_key);
             // Corrupt the ciphertext and check that we get an implicit reject.
             let mut bad_ct = ct.clone();
             bad_ct.as_vec_mut()[0] ^= 1;
-            let bad_decaps_key = ml_kem_512.decaps(&r.private_dec, &bad_ct).unwrap();
+            let bad_decaps_key = ml_kem_512
+                .decaps(&r.private_dec.as_bytes(), &bad_ct.as_bytes())
+                .unwrap();
             assert_ne!(key, bad_decaps_key);
             let known_bad_decaps_key = ml_kem_512
-                .decaps(&r.private_dec, &t.implicit_reject_ct)
+                .decaps(&r.private_dec.as_bytes(), &t.implicit_reject_ct.as_bytes())
                 .unwrap();
             assert_eq!(t.implicit_reject, known_bad_decaps_key);
         }
@@ -458,7 +483,7 @@ mod tests {
             Bytes32::from_hex("C72D033632F2272E8DAC83A1E2494E9129695893D28BD39131D44F60A4380AFF")
                 .unwrap();
         let ml_kem_1024 = ParamSet::ml_kem_1024();
-        let k = ml_kem_1024.decaps(&dk, &c).unwrap();
+        let k = ml_kem_1024.decaps(&dk.as_bytes(), &c.as_bytes()).unwrap();
         assert_eq!(e_k, k);
     }
 
@@ -474,7 +499,7 @@ mod tests {
             Bytes32::from_hex("F91B8C7477A6005992EE947BB365EBF1CFE15688BD25DEEFAD54F90922B4B84C")
                 .unwrap();
         let ml_kem_512 = ParamSet::ml_kem_512();
-        let (k, c) = ml_kem_512.encaps(&ek, &m).unwrap();
+        let (k, c) = ml_kem_512.encaps(&ek.as_bytes(), &m.as_bytes()).unwrap();
         assert_eq!(e_k, k);
         assert_eq!(e_c, c);
     }
@@ -492,7 +517,7 @@ mod tests {
         let dk = Bytes::from_hex("EA35075D429C8E81ADA6C4BB97D78624C602FB173DFFC78E5C744FF2FAC345B55E04A3B7325A63F58B43EEF168E259910C35A0952A7ADCF43634889C98918A1CE7B62671C1968A02688160C09B7DE9978B77A557D265A40F7C79F3124247FA0C14F8A9F2C2B939470CAD5ACA5E664ADD7B5444643B559C4BF84C524A063DA7E552C9107BB0887BC22C73F76B63ABA60955A06D1CF34491275859D46FEDEA738FEC14D9920458A7C31E657549A6160480784D5C229AD88932B384A0B0A16DD6C8FCEA56B61A50E67442FB9928B4676D92A6717A564D8E939BB7957D750BB70D2B20D8445A8912BC7940489AE01584DC7D7952A686F245D09C547EF40B74C6748B318059F66F2B76C72ECBB3A64167CAE08C27368902B76DFF684A14482AFAE5837CB6838E685987FA4E3FF7CC4A36631CBA1F77915E7C580853E3C6C84859ADC8C2A15CB131E78305F4BCB4A8100AAB206EC97D14862CF5DA4D3AE2066D4C41BBA9187BECBE0809CE6AAC1FE20BCAE87714BE1542BA9053F1802B65C82909594984A186841B2BFCB3AF38100C5E685E7B9B85515C469CA50B1F799229E024B68A4A412A185677444491689957A576F5029C742DB64C3F63614B43AA23C433A1B37811CDC1184E11BB7D9C20E587A862B364EF59651259B26F8375E4510CBB12A475816A364BA72C07566D50A2B4E4503188B7B465080DB88EE663928C894367492E1617CCBF36CF844B9D17072A3178809629B4B9729CF82C9935AA9B1205AEA6631C8EE23CEE832C46E0583FAC43C5BC5131B934527740AB12877D295C72089073E6A2567B655CCB2965FAA3DECA8315815E7B6514F05BACE8A7000B548993734DE3964F2709542496122BE58A7E536CC827839693492AE88E75EA13154AB109E6BD16F4486EE1C3EA61B8FA259283B3BC2BFB589D3206A3C77521AA08C253B4E4CC8B5F87467EEA18EBD48D92604382DB0C0087A3B501066CB55EC9602D2696380A6A5DF33C05C9B01700B61D0FC169DEBC28B3108B096B24D93B8FFE67066286B0E1461265896E33A8089D8B0B81A9781700A983B28022125A4934575220325B318622F73E6FC6CBA5571D0537894AA890426B835640489AA218972180BB2534BCC477C62CC839135934F3B14CD0808A11557D331103B30F9A8C0CB0FA8F0A2A152E802E48E408087510D5114D4D2399A51530616C7E310528308176D0042710BC8344EC3D4CA810A92978BFABB516D81CAB0753CDF325AC2377A1F96EFC73C15F5AA367A1582A13651B0337C7943C1D54637669686BEBBD392511FFFC9E3A68CBEEC0CE2CF59A8D51C4DE288EB4641DF6610C82D09CDDA418ACD83F0DCA2859B27117E87981AAA8EBA47515812DA2C27ADF9C682E373D5AF294BE3104474B8D14173788965ECCD80322B6CA04240E7D150F2CD4B04066C1924039B9E4A9E06C2B55DBA2FDDABB4065CFE7EBC5AE01CD45C76374683CB1820C34A841836391B9D8C2AA22B29E7436CFCAB789B3CE8AE2700351C1165B7B4F72CC53E913E5668AE75170352A0DE68A5E3819443DB4113161A2019C4930C97011F31540B833E9A890503A7EC3F38C0D94BE3C7501C6161F39099E3CAC0139ACC7271B70D1664A36A89FA4D22857C6C15AD4C52D5C26E23B81DCDA9FD7A49980C5818888AB2538AD91F54E691B7558C63FAE433A7FAB51485989F4335E6187B65041401238AA0A5A932356207796AF2C70363034546F4615499245E1228BFF2C76674634A60C9A04E00FB276C6C00A114BF1B2C8961E740A082940CEEAAB464370BBBB3919C7421BC81C732415A711AA935A4C2C02CB5D0BCBB99CE830EDDBAE4C228E4F095E29FBC27EA2B881697A1D309D28C480C3E9691FB63480BC5C6239B6CCAA41CD52A6209038C2C887BC71C1BD514A0FAA21721A2A5B30ACB168227833A8260422C1F4815EC2ADB207389FB1B817D78FC96063434B6728E18469475DB5D712BC403D8231CF9C8926D0A94B6830881FA5678AD04499F40D5CA83479BA85A70B1196C32A68A6B7FFB40EA6FC3FF020768B91B27F653746546C5E256B14069E827C1616FC7647F8B70F8A32DB551CF715BBB315B7B9BC20FF76847CFC4AEAC23DDC1302EC928CFE40447C761143194DA1415D3D8389F61BAB41EB605729123A320BB54B3B3FBCBC787C46F354C7D7D60F8DFE3729375AEF1891C08A79DE237E39E860061D2B87926182B602639ABB65FEBAF116F6A2FCCC167A51A2E2E6F4494C58336A2E1A394111163803FE2E8519C335A6867556338EADAFA22B5FC557430560CCD693").unwrap();
 
         let ml_kem_512 = ParamSet::ml_kem_512();
-        let kp = ml_kem_512.keygen(&d, &z).unwrap();
+        let kp = ml_kem_512.keygen(&d.as_bytes(), &z.as_bytes()).unwrap();
         assert_eq!(ek, kp.public_enc);
         assert_eq!(dk, kp.private_dec);
     }

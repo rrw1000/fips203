@@ -1,7 +1,6 @@
 use crate::{
     format,
     kem::{basics, mul, ntt},
-    types::Bytes,
 };
 use anyhow::{Result, anyhow};
 
@@ -19,26 +18,26 @@ impl Vector {
         }
     }
 
-    pub fn decode_from(data: &Bytes, d: u8, dimension: u32) -> Result<Self> {
+    pub fn decode_from(data: &[u8], d: u8, dimension: u32) -> Result<Self> {
         let mut rv = Self {
             values: [[0_u32; 256]; 4],
             dimension,
         };
         for idx in 0..(dimension as usize) {
-            rv.values[idx] = basics::byte_decode(&data.interval(idx * 384..(idx + 1) * 384), d)?
+            rv.values[idx] = basics::byte_decode(&data[idx * 384..(idx + 1) * 384], d)?
         }
         Ok(rv)
     }
 
     /// Returns the decompressed vector and the first remaining index in the slice.
-    pub fn decompress_from(bytes: &Bytes, dimension: u32, du: u8) -> Result<(Self, usize)> {
+    pub fn decompress_from(bytes: &[u8], dimension: u32, du: u8) -> Result<(Self, usize)> {
         let mut rv = Self {
             values: [[0_u32; 256]; 4],
             dimension,
         };
         let mult = 32 * (du as usize);
         for idx in 0..(dimension as usize) {
-            let c = bytes.interval(idx * mult..(idx + 1) * mult);
+            let c = &bytes[idx * mult..(idx + 1) * mult];
             rv.values[idx] = basics::decompress_poly(basics::byte_decode(&c, du)?, du);
         }
 

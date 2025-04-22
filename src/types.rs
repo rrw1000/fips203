@@ -98,10 +98,24 @@ impl Bytes {
         Self(Vec::new())
     }
 
+    pub fn append_32(&mut self, other: &Bytes32) {
+        self.0.extend(other.as_bytes())
+    }
+
+    pub fn append(&mut self, other: &Bytes) {
+        self.0.extend(other.as_bytes());
+    }
+
+    pub fn append_slice(&mut self, other: &[u8]) {
+        self.0.extend(other);
+    }
+
+    // Potentially destroys other
     pub fn accumulate_32(&mut self, other: Bytes32) {
         self.0.extend(other.as_bytes())
     }
 
+    // Potentially destroys other.
     pub fn accumulate(&mut self, other: Bytes) {
         self.0.extend(other.as_bytes())
     }
@@ -162,12 +176,28 @@ impl From<Vec<u8>> for Bytes {
     }
 }
 
+impl From<&[u8]> for Bytes {
+    fn from(bytes: &[u8]) -> Self {
+        Self(bytes.to_vec())
+    }
+}
+
+impl From<&[u8; 32]> for Bytes {
+    fn from(bytes: &[u8; 32]) -> Self {
+        Self(bytes.to_vec())
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bytes32([u8; 32]);
 
 impl Bytes32 {
     pub fn new(bytes: [u8; 32]) -> Self {
         Self(bytes)
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
     }
 
     pub fn as_bytes(&self) -> &[u8; 32] {
