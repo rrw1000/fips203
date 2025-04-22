@@ -112,6 +112,61 @@ pub fn sk_decode(encoded: &Bytes, n: u32, d: u32, k: u32, l: u32) -> Result<SK> 
     Ok(result)
 }
 
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub struct Sig {
+    c: Bytes,
+    z: Vec<[i32; 256]>,
+    h: Vec<[i32; 256]>,
+    gamma_1: u32,
+    lambda: u32,
+    l: u32,
+    w: u32,
+}
+
+pub fn sig_encode(sig: &Sig) -> Result<Bytes> {
+    let mut rv = Bytes::default();
+    if sig.c.len() != ((sig.lambda >> 2) as usize) {
+        return Err(anyhow!(
+            "c is of length {}, but lambda is {}",
+            sig.c.len(),
+            sig.lambda
+        ));
+    }
+    rv.append(&sig.c);
+    for v in sig.z.iter() {
+        rv.accumulate(convert::bit_pack(v, sig.gamma_1 - 1, sig.gamma_1)?);
+    }
+    rv.accumulate(convert::hint_bit_pack(&sig.h, sig.w));
+    Ok(rv)
+}
+
+pub fn sig_decode(sig: &[u8], gamma_1: u32, lambda: u32, l: u32, w: u32) -> Result<Sig> {
+    let c_len = (lambda >> 2) as usize;
+    let c = Bytes::from(&sig[0..c_len]);
+    let mut z = Vec::new();
+    let mut offset = c_len;
+    let z_bits = 32 * (1 + convert::bitlen(gamma_1 - 1)) as usize;
+    for _ in 0..l {
+        z.push(convert::bit_unpack(
+            &sig[offset..offset + z_bits],
+            gamma_1 - 1,
+            gamma_1,
+        )?);
+        offset += z_bits;
+    }
+    let h =
+        convert::hint_bit_unpack(&sig[offset..], w).ok_or(anyhow!("Cannot unpack hint bits"))?;
+    Ok(Sig {
+        c,
+        z,
+        h,
+        gamma_1,
+        lambda,
+        l,
+        w,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,5 +219,27 @@ mod tests {
         let encoded = sk_encode(&sk_in).unwrap();
         let decoded = sk_decode(&encoded, n, d, k, l).unwrap();
         assert_eq!(sk_in, decoded);
+    }
+
+    #[test]
+    fn test_sig_encoding() {
+        // lambda>>2 is 32
+        let c = Bytes::from_hex("1faef05caa3a39f4589225fa27573c2643f400d13de1047fd09d37bc1ce5d068")
+            .unwrap();
+        // l = 4 k = 4
+        let z = vec![[0; 256], [1; 256], [2; 256], [3; 256]];
+        let h = vec![[0; 256], [0; 256], [0; 256], [0; 256]];
+        let sig = Sig {
+            c,
+            z,
+            h,
+            gamma_1: (1 << 17),
+            lambda: 128,
+            l: 4,
+            w: 80,
+        };
+        let encoded = sig_encode(&sig).unwrap();
+        let restored = sig_decode(encoded.as_bytes(), 1 << 17, 128, 4, 80).unwrap();
+        assert_eq!(sig, restored);
     }
 }
