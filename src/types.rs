@@ -98,6 +98,10 @@ impl Bytes {
         Self(Vec::new())
     }
 
+    pub fn zero(nr: usize) -> Self {
+        Self(vec![0; nr])
+    }
+
     pub fn append_32(&mut self, other: &Bytes32) {
         self.0.extend(other.as_bytes())
     }
@@ -130,6 +134,10 @@ impl Bytes {
 
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
+    }
+
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice()
     }
 
     pub fn as_vec(&self) -> &Vec<u8> {

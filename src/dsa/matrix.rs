@@ -1,6 +1,27 @@
 // DSA matrix ops
 // @todo should turn these into generic matrix ops at some point.
 
+#[derive(Default, Debug, Clone, Eq, PartialEq)]
+pub struct Vector {
+    values: Vec<[i32; 256]>,
+}
+
+impl Vector {
+    pub fn zero(l: usize) -> Self {
+        Self {
+            values: vec![[0_i32; 256]; l],
+        }
+    }
+
+    pub fn as_vec_mut(&mut self) -> &mut Vec<[i32; 256]> {
+        &mut self.values
+    }
+
+    pub fn at(&self, idx: usize) -> &[i32; 256] {
+        &self.values[idx]
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Matrix {
     // matrix entries in row-major format.
