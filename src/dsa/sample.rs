@@ -1,13 +1,9 @@
 // Sampling
 
-use crate::{
-    dsa::{convert, dsa},
-    format,
-    types::{Bits, Bytes, IntRange2Or4},
-};
+use crate::{dsa::convert, format, types::IntRange2Or4};
 use anyhow::Result;
 use sha3::{
-    Shake128, Shake256, Shake256Reader,
+    Shake128, Shake256,
     digest::{ExtendableOutput, Update, XofReader},
 };
 
@@ -57,9 +53,58 @@ pub fn rej_ntt_poly(p: &[u8]) -> Result<[i32; 256]> {
     Ok(a_hat)
 }
 
+pub fn rej_bounded_poly(p: &[u8], n: IntRange2Or4) -> Result<[i32; 256]> {
+    let mut a: [i32; 256] = [0; 256];
+    let mut j = 0;
+    // H is SHAKE256
+    let mut ctx = Shake256::default();
+    ctx.update(p);
+    let mut reader = ctx.finalize_xof();
+    while j < 256 {
+        let mut s: [u8; 1] = [0; 1];
+        reader.read(&mut s);
+        let z0 = convert::coeff_from_half_byte(s[0] & 0xf, n);
+        let z1 = convert::coeff_from_half_byte((s[0] >> 4) & 0xf, n);
+        if let Some(v) = z0 {
+            a[j] = v;
+            j += 1;
+        }
+        if j < 256 {
+            if let Some(v) = z1 {
+                a[j] = v;
+                j += 1;
+            }
+        }
+    }
+    Ok(a)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Bytes;
+
+    #[test]
+    fn test_rej_bounded_poly() {
+        // Should be 66 of these.
+        // This is a pure regression test let p =
+        let p = Bytes::from_hex("124be522e3740ce4f0feb782523e2ee5f2f69959fe75b3a03107143d322a0cb865f77bb92d72a4f41c3098b8c36a91f3a6919a651af597b9b2737bf5b7e62010208f").unwrap();
+        let poly = rej_bounded_poly(p.as_bytes(), IntRange2Or4::Two).unwrap();
+        let expected = [
+            1, -1, -1, 0, -2, -2, -2, 0, 1, 0, -1, -1, 1, -1, 0, 0, 2, 2, -1, 2, 0, 2, 0, -2, 2, 2,
+            2, 1, 0, 0, -2, -2, 0, 2, 1, 2, -2, 2, 2, 1, 0, 2, -2, 1, -1, 2, 0, -2, -2, 2, -1, -1,
+            -1, -1, -1, -1, -1, 0, 2, 1, -2, 0, -2, 0, -1, -2, 0, -2, -1, 1, -2, 2, 0, 1, 1, -1,
+            -1, -1, -2, 1, 2, -1, 1, 2, 2, -1, -2, 0, 0, 0, 1, -2, 1, -1, 0, 1, -1, 0, -1, 1, -2,
+            -1, -2, 0, 0, -1, 2, -2, -1, -2, -2, 2, 0, 2, 2, 1, 0, 0, 1, 0, 2, -2, -1, -2, 2, -2,
+            2, 1, -2, 1, 2, -1, 2, -1, 2, 0, -1, -2, 2, -2, -1, 1, -1, 0, 0, 1, 0, -1, 1, 1, 2, 0,
+            -2, 2, 1, 2, -1, -1, 2, 1, 1, 0, 0, -1, 1, 1, 1, -1, 0, 1, -1, -1, 2, -2, 1, -1, 1, -2,
+            0, -1, 2, 2, -2, 2, 2, -1, 0, -2, -1, 2, -2, 0, -1, -2, -2, 1, 1, 0, -1, -2, 2, 2, 0,
+            -1, 2, -2, 0, 2, 0, -1, 0, -1, 1, 2, 1, 2, -1, 1, -1, -2, -2, 0, 0, 1, 0, 1, -2, -1,
+            -1, -2, 0, -2, 0, -2, -1, -2, -1, 1, 1, -2, 1, -1, -2, 0, 0, 2, 2, -1, 0, -2, -2, -1,
+            2, 0, 0, 1,
+        ];
+        assert_eq!(expected, poly);
+    }
 
     #[test]
     fn test_rej_ntt_poly() {
