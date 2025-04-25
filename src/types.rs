@@ -8,6 +8,14 @@ use std::iter::Iterator;
 use std::ops::{Index, Range};
 use std::{fmt, io::Read};
 
+/// This could be a tuple; it is only here to ensure that before you use a (private) decryption key
+/// you have to type "private_dec", which will hopefully make you think about where you are exposing it.
+#[derive(Default, Clone)]
+pub struct KeyPair {
+    pub public_enc: Bytes,
+    pub private_dec: Bytes,
+}
+
 pub struct XOF(Shake128);
 
 impl XOF {

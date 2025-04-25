@@ -108,26 +108,26 @@ pub fn expand_s(
     let mut s1 = matrix::Vector::default();
     for r in 0..l {
         let mut local_p = Bytes::from(p);
-        local_p.accumulate(convert::integer_to_bytes(r, 2));
+        local_p.accumulate(convert::integer_to_bytes(r as i32, 2));
         let v = rej_bounded_poly(local_p.as_bytes(), n)?;
         s1.as_vec_mut().push(v);
     }
     let mut s2 = matrix::Vector::default();
     for r in 0..k {
         let mut local_p = Bytes::from(p);
-        local_p.accumulate(convert::integer_to_bytes(r + l, 2));
+        local_p.accumulate(convert::integer_to_bytes((r + l) as i32, 2));
         let v = rej_bounded_poly(local_p.as_bytes(), n)?;
         s2.as_vec_mut().push(v);
     }
     Ok((s1, s2))
 }
 
-pub fn expand_mask(p: &[u8], mu: u32, gamma_1: u32, l: u32) -> Result<matrix::Vector> {
+pub fn expand_mask(p: &[u8], mu: i32, gamma_1: i32, l: u32) -> Result<matrix::Vector> {
     let mut result = matrix::Vector::default();
     let c = 1 + convert::bitlen(gamma_1 - 1);
     for r in 0..l {
         let mut p_prime = Bytes::from_bytes(p);
-        p_prime.accumulate(convert::integer_to_bytes(mu + r, 2));
+        p_prime.accumulate(convert::integer_to_bytes(mu + (r as i32), 2));
         // H is SHAKE256
         let mut xof = Shake256::default();
         xof.update(p_prime.as_bytes());

@@ -1,17 +1,9 @@
 use crate::{
     format,
     kem::{basics, matrix, ntt, sample},
-    types::{Bytes, Bytes32, IntRange2To3},
+    types::{Bytes, Bytes32, IntRange2To3, KeyPair},
 };
 use anyhow::{Result, anyhow};
-
-/// This could be a tuple; it is only here to ensure that before you use a (private) decryption key
-/// you have to type "private_dec", which will hopefully make you think about where you are exposing it.
-#[derive(Default, Clone)]
-pub struct KeyPair {
-    pub public_enc: Bytes,
-    pub private_dec: Bytes,
-}
 
 /// A parameter set; intentionally no Default() - you need to select your encryption strength explicitly.
 #[derive(Eq, PartialEq, Clone)]

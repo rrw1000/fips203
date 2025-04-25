@@ -1,14 +1,14 @@
 // Conversions between data types
 
 use crate::{
-    dsa::dsa,
+    dsa::basics,
     format,
     types::{Bits, Bytes, IntRange2Or4},
 };
 use anyhow::Result;
 
 // @todo this could be optimised quite heavily.
-pub fn integer_to_bits(x: u32, alpha: u32) -> Bits {
+pub fn integer_to_bits(x: i32, alpha: u32) -> Bits {
     let mut rv = Bits::default();
     let vec = rv.as_vec_mut();
     let mut rest = x;
@@ -29,7 +29,7 @@ pub fn bits_to_integer(y: &Bits, alpha: u32) -> u32 {
     result
 }
 
-pub fn integer_to_bytes(x: u32, alpha: u32) -> Bytes {
+pub fn integer_to_bytes(x: i32, alpha: u32) -> Bytes {
     let mut result = Bytes::default();
     let writer = result.as_vec_mut();
     let mut rest = x;
@@ -40,9 +40,15 @@ pub fn integer_to_bytes(x: u32, alpha: u32) -> Bytes {
     result
 }
 
-pub fn coeff_from_three_bytes(b0: u8, b1: u8, b2: u8) -> Option<u32> {
+pub fn coeff_from_three_bytes(b0: u8, b1: u8, b2: u8) -> Option<i32> {
     let result: u32 = ((b2 & 0x7f) as u32) << 16 | ((b1 as u32) << 8) | (b0 as u32);
-    if result < dsa::Q { Some(result) } else { None }
+    // do it this way to avoid the possibility of accidental sign extension.
+    let signed_result = result as i32;
+    if signed_result < basics::Q {
+        Some(signed_result)
+    } else {
+        None
+    }
 }
 
 pub fn coeff_from_half_byte(b: u8, n: IntRange2Or4) -> Option<i32> {
@@ -64,11 +70,11 @@ pub fn coeff_from_half_byte(b: u8, n: IntRange2Or4) -> Option<i32> {
     }
 }
 
-pub fn bitlen(b: u32) -> u32 {
+pub fn bitlen(b: i32) -> u32 {
     if b == 0 { 0 } else { b.ilog2() + 1 }
 }
 
-pub fn simple_bit_pack(b: u32, r: &[u32; 256]) -> Result<Bytes> {
+pub fn simple_bit_pack(b: i32, r: &[i32; 256]) -> Result<Bytes> {
     let mut z = Bits::default();
     let nr_bits = bitlen(b);
     for v in r.iter() {
@@ -79,28 +85,28 @@ pub fn simple_bit_pack(b: u32, r: &[u32; 256]) -> Result<Bytes> {
 }
 
 // Here, since the modulus isn't specified, we have vectors over i32.
-pub fn bit_pack(w: &[i32; 256], a: u32, b: u32) -> Result<Bytes> {
+pub fn bit_pack(w: &[i32; 256], a: i32, b: i32) -> Result<Bytes> {
     let mut z = Bits::default();
     let nr_bits = bitlen(a + b);
     for v in w.iter() {
-        let mut this_coeff = integer_to_bits(((b as i32) - v) as u32, nr_bits);
+        let mut this_coeff = integer_to_bits((b as i32) - v, nr_bits);
         z.as_vec_mut().append(this_coeff.as_vec_mut());
     }
     format::bits_to_bytes(&z)
 }
 
-pub fn simple_bit_unpack(b: u32, v: &[u8]) -> Result<[u32; 256]> {
-    let mut result: [u32; 256] = [0; 256];
+pub fn simple_bit_unpack(b: i32, v: &[u8]) -> Result<[i32; 256]> {
+    let mut result: [i32; 256] = [0; 256];
     let nr_bits = bitlen(b);
     let z = format::bytes_to_bits(v)?;
     for (idx, item) in result.iter_mut().enumerate() {
         let bit_idx = idx * (nr_bits as usize);
-        *item = bits_to_integer(&z.interval(bit_idx..bit_idx + (nr_bits as usize)), nr_bits);
+        *item = bits_to_integer(&z.interval(bit_idx..bit_idx + (nr_bits as usize)), nr_bits) as i32;
     }
     Ok(result)
 }
 
-pub fn bit_unpack(v: &[u8], a: u32, b: u32) -> Result<[i32; 256]> {
+pub fn bit_unpack(v: &[u8], a: i32, b: i32) -> Result<[i32; 256]> {
     let mut result: [i32; 256] = [0; 256];
     let c = bitlen(a + b);
     let z = format::bytes_to_bits(v)?;
@@ -112,7 +118,7 @@ pub fn bit_unpack(v: &[u8], a: u32, b: u32) -> Result<[i32; 256]> {
     Ok(result)
 }
 
-pub fn hint_bit_pack(v: &[[i32; 256]], w: u32) -> Bytes {
+pub fn hint_bit_pack(v: &[[i32; 256]], w: i32) -> Bytes {
     let mut result = Bytes::default();
     let vec = result.as_vec_mut();
     let k = v.len();
@@ -130,7 +136,7 @@ pub fn hint_bit_pack(v: &[[i32; 256]], w: u32) -> Bytes {
     result
 }
 
-pub fn hint_bit_unpack(y: &[u8], w: u32) -> Option<Vec<[i32; 256]>> {
+pub fn hint_bit_unpack(y: &[u8], w: i32) -> Option<Vec<[i32; 256]>> {
     // First, recover k.
     let k = y.len() - (w as usize);
     let mut result: Vec<[i32; 256]> = vec![[0; 256]; k];
@@ -190,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_simple_bit_pack_unpack() {
-        let mut r: [u32; 256] = [12; 256];
+        let mut r: [i32; 256] = [12; 256];
         r[0] = 45;
         let result = simple_bit_pack(46, &r).unwrap();
         println!("result = {}", hex::encode(result.as_vec()));
