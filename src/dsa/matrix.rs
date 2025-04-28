@@ -3,7 +3,7 @@
 
 use crate::dsa::{basics, ntt};
 use anyhow::{Result, anyhow};
-use std::iter::zip;
+use std::{fmt, iter::zip};
 
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct Vector {
@@ -90,18 +90,38 @@ impl Vector {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Matrix {
     // matrix entries in row-major format.
     values: Vec<[i32; 256]>,
     cols: usize,
 }
 
+// Corresponds with leancrypto's output.
+impl fmt::Debug for Matrix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for k in 0..self.rows() {
+            for l in 0..self.cols {
+                write!(f, "K({}) x L({}) x N:", k, l)?;
+                let coeff = self.at(k, l);
+                for c in coeff.iter() {
+                    write!(f, " 0x{:08x} ", c)?;
+                }
+                writeln!(f)?;
+            }
+        }
+        writeln!(f)
+    }
+}
+
 impl Matrix {
-    pub fn new(x: usize, y: usize) -> Self {
+    /// Create a new k by l matrix.
+    pub fn new(k: usize, l: usize) -> Self {
+        // The matrix is stored with all the ls together and the array is addressed
+        // (cols * k_idx) + l_offset .
         Matrix {
-            values: vec![[0; 256]; x * y],
-            cols: x,
+            values: vec![[0; 256]; k * l],
+            cols: l,
         }
     }
 
@@ -117,17 +137,18 @@ impl Matrix {
         &mut self.values
     }
 
-    pub fn value(&mut self, x: usize, y: usize) -> &mut [i32; 256] {
-        let idx = x + self.cols * y;
+    pub fn value(&mut self, k: usize, l: usize) -> &mut [i32; 256] {
+        let idx = k * self.cols + l;
         &mut self.values[idx]
     }
-    pub fn at(&self, x: usize, y: usize) -> &[i32; 256] {
-        &self.values[x + self.cols * y]
+    pub fn at(&self, k: usize, l: usize) -> &[i32; 256] {
+        &self.values[self.cols * k + l]
     }
 
     pub fn mul_ntt(&self, v: &Vector) -> Vector {
         let k = self.rows();
         let l = self.cols;
+        println!("k = {k} l ={l}");
         let mut w_hat = Vector::zero(k);
         for i in 0..k {
             for j in 0..l {

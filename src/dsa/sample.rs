@@ -85,6 +85,7 @@ pub fn rej_bounded_poly(p: &[u8], n: IntRange2Or4) -> Result<[i32; 256]> {
 }
 
 pub fn expand_a(p: &[u8], k: u32, l: u32) -> Result<matrix::Matrix> {
+    println!("expand_a k = {k} l = {l}");
     let mut result = matrix::Matrix::new(k as usize, l as usize);
     for r in 0..k {
         for s in 0..l {
