@@ -18,12 +18,8 @@ pub fn ntt(w: &[i32; 256]) -> [i32; 256] {
         }
         len >>= 1;
     }
-    // At the end, go through and turn everything +ve, as required by the definition of mod in
-    // fips-204
     for x in w_hat.iter_mut() {
-        if *x < 0 {
-            *x += basics::Q;
-        }
+        *x = basics::mod_pm(*x, basics::Q);
     }
     w_hat
 }
@@ -37,22 +33,19 @@ pub fn inv_ntt(w_hat: &[i32; 256]) -> [i32; 256] {
         while start < 256 {
             m -= 1;
             let z = -basics::ZETAS[m];
+            // @todo this could be made _much_ more efficient.
             for j in start..start + len {
                 let t = w[j];
-                w[j] = (t + w[j + len]) % basics::Q;
-                w[j + len] = (t - w[j + len]) % basics::Q;
-                w[j + len] = basics::red_mul(z, w[j + len]);
+                w[j] = basics::mod_q_pos(t + w[j + len]);
+                w[j + len] = basics::mod_q_pos(t - w[j + len]);
+                w[j + len] = basics::mod_q_pos(basics::red_mul(z, w[j + len]));
             }
             start += len << 1;
         }
         len <<= 1;
     }
     for x in w.iter_mut() {
-        *x = (((*x as i64) * 8347681) % (basics::Q as i64)) as i32;
-        // fips-204 wants all +ve answers for its inv_ntt().
-        if *x < 0 {
-            *x += basics::Q;
-        }
+        *x = basics::mod_q_pos((((*x as i64) * 8347681) % (basics::Q as i64)) as i32);
     }
     w
 }

@@ -12,7 +12,7 @@ use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
 };
 
-pub fn sample_in_ball(p: &[u8], tau: u32) -> Result<[i32; 256]> {
+pub fn sample_in_ball(p: &[u8], tau: i32) -> Result<[i32; 256]> {
     // H is SHAKE256.
     let mut c: [i32; 256] = [0; 256];
     let mut xof = Shake256::default();

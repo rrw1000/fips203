@@ -5,7 +5,7 @@ use crate::dsa::{basics, ntt};
 use anyhow::{Result, anyhow};
 use std::{fmt, iter::zip};
 
-#[derive(Default, Debug, Clone, Eq, PartialEq)]
+#[derive(Default, Clone, Eq, PartialEq)]
 pub struct Vector {
     values: Vec<[i32; 256]>,
 }
@@ -15,6 +15,10 @@ impl Vector {
         Self {
             values: vec![[0_i32; 256]; l],
         }
+    }
+
+    pub fn as_slice(&self) -> &[[i32; 256]] {
+        self.values.as_slice()
     }
 
     pub fn as_vec(&self) -> &Vec<[i32; 256]> {
@@ -54,6 +58,30 @@ impl Vector {
         Ok(Self { values })
     }
 
+    pub fn sub(&self, other: &Vector) -> Result<Vector> {
+        if self.len() != other.len() {
+            return Err(anyhow!(
+                "Attempt to subtract vectors of unequal length {} vs {}",
+                self.len(),
+                other.len()
+            ));
+        }
+        let values = zip(self.values.iter(), other.values.iter())
+            .map(|(a, b)| basics::poly_sub(a, b))
+            .collect();
+        Ok(Self { values })
+    }
+
+    pub fn mod_pm(&self) -> Vector {
+        let values = self.values.iter().map(basics::poly_pm).collect();
+        Self { values }
+    }
+
+    pub fn minus(&self) -> Vector {
+        let values = self.values.iter().map(basics::minus).collect();
+        Self { values }
+    }
+
     pub fn add_ntt(&self, other: &Vector) -> Vector {
         let values = zip(self.values.iter(), other.values.iter())
             .map(|(a, b)| basics::poly_add(a, b))
@@ -87,6 +115,78 @@ impl Vector {
             .map(|vi| basics::poly_power2_round(vi, d))
             .unzip();
         (Self { values: v1 }, Self { values: v2 })
+    }
+
+    pub fn high_bits(&self, gamma_2: i32) -> Vector {
+        let values = self
+            .values
+            .iter()
+            .map(|vi| basics::high_bits_vec(vi, gamma_2))
+            .collect();
+        Self { values }
+    }
+
+    pub fn make_hint(&self, r: &Vector, gamma_2: i32) -> Result<Vector> {
+        if self.len() != r.len() {
+            return Err(anyhow!(
+                "Attempt to make_hint on vectors of unequal length {}, {}",
+                self.len(),
+                r.len()
+            ));
+        }
+        let values = zip(self.values.iter(), r.values.iter())
+            .map(|(a, b)| basics::poly_make_hint(a, b, gamma_2))
+            .collect();
+        Ok(Self { values })
+    }
+
+    pub fn low_bits(&self, gamma_2: i32) -> Vector {
+        let values = self
+            .values
+            .iter()
+            .map(|vi| basics::low_bits_vec(vi, gamma_2))
+            .collect();
+        Self { values }
+    }
+
+    pub fn metric_inf(&self) -> i32 {
+        self.values
+            .iter()
+            .map(|v1| v1.iter().map(|x| i32::abs(*x)).max().unwrap_or(0))
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub fn count_ones(&self) -> usize {
+        self.values.iter().map(basics::poly_count_ones).sum()
+    }
+
+    pub fn reduce(&self) -> Vector {
+        let values = self
+            .values
+            .iter()
+            .map(|vi| basics::mod_vec(vi, basics::Q))
+            .collect();
+        Self { values }
+    }
+}
+
+impl From<Vec<[i32; 256]>> for Vector {
+    fn from(values: Vec<[i32; 256]>) -> Vector {
+        Self { values }
+    }
+}
+
+impl fmt::Debug for Vector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for k in 0..self.values.len() {
+            write!(f, "K({}) x N: [ {} ", k, self.values[k][0])?;
+            for v in self.values[k].iter().skip(1) {
+                write!(f, ", {v}")?;
+            }
+            writeln!(f, "]")?;
+        }
+        writeln!(f)
     }
 }
 
@@ -148,7 +248,6 @@ impl Matrix {
     pub fn mul_ntt(&self, v: &Vector) -> Vector {
         let k = self.rows();
         let l = self.cols;
-        println!("k = {k} l ={l}");
         let mut w_hat = Vector::zero(k);
         for i in 0..k {
             for j in 0..l {

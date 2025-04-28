@@ -73,13 +73,12 @@ pub struct SKOut {
     pub t0: Vec<[i32; 256]>,
 }
 
-pub fn sk_decode(encoded: &Bytes, nu: IntRange2Or4, d: i32, k: u32, l: u32) -> Result<SKOut> {
-    let byte_slice = encoded.as_bytes();
+pub fn sk_decode(encoded: &[u8], nu: IntRange2Or4, d: i32, k: u32, l: u32) -> Result<SKOut> {
     // For efficiency, we do this by slice.
     let bl = (32 * convert::bitlen((2 * nu.value()) as i32)) as usize;
-    let p = Bytes32::try_from(&byte_slice[0..32])?;
-    let big_k = Bytes32::try_from(&byte_slice[32..64])?;
-    let tr = Bytes::from_bytes(&byte_slice[64..128]);
+    let p = Bytes32::try_from(&encoded[0..32])?;
+    let big_k = Bytes32::try_from(&encoded[32..64])?;
+    let tr = Bytes::from_bytes(&encoded[64..128]);
     // Hopefully this will be constant-propagated by the compiler, so it's really
     // just handy readability sugar.
     let mut offset = 128;
@@ -100,12 +99,12 @@ pub fn sk_decode(encoded: &Bytes, nu: IntRange2Or4, d: i32, k: u32, l: u32) -> R
     }
     let n = nu.value() as i32;
     for _ in 0..l {
-        let cand = convert::bit_unpack(&byte_slice[offset..offset + bl], n, n)?;
+        let cand = convert::bit_unpack(&encoded[offset..offset + bl], n, n)?;
         push_if_valid(&mut s1, cand, n)?;
         offset += bl;
     }
     for _ in 0..k {
-        let cand = convert::bit_unpack(&byte_slice[offset..offset + bl], n, n)?;
+        let cand = convert::bit_unpack(&encoded[offset..offset + bl], n, n)?;
         push_if_valid(&mut s2, cand, n)?;
         offset += bl;
     }
@@ -113,7 +112,7 @@ pub fn sk_decode(encoded: &Bytes, nu: IntRange2Or4, d: i32, k: u32, l: u32) -> R
     let d_exp = 1 << (d - 1);
     for _ in 0..k {
         t0.push(convert::bit_unpack(
-            &byte_slice[offset..offset + bytes_per_t0],
+            &encoded[offset..offset + bytes_per_t0],
             d_exp - 1,
             d_exp,
         )?);
@@ -129,15 +128,15 @@ pub fn sk_decode(encoded: &Bytes, nu: IntRange2Or4, d: i32, k: u32, l: u32) -> R
     })
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
-pub struct Sig {
-    c: Bytes,
-    z: Vec<[i32; 256]>,
-    h: Vec<[i32; 256]>,
-    gamma_1: i32,
-    lambda: i32,
-    l: u32,
-    w: i32,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sig<'a> {
+    pub c: &'a [u8],
+    pub z: &'a Vec<[i32; 256]>,
+    pub h: &'a Vec<[i32; 256]>,
+    pub gamma_1: i32,
+    pub lambda: i32,
+    pub l: u32,
+    pub w: i32,
 }
 
 pub fn sig_encode(sig: &Sig) -> Result<Bytes> {
@@ -149,7 +148,7 @@ pub fn sig_encode(sig: &Sig) -> Result<Bytes> {
             sig.lambda
         ));
     }
-    rv.append(&sig.c);
+    rv.append_slice(sig.c);
     for v in sig.z.iter() {
         rv.accumulate(convert::bit_pack(v, sig.gamma_1 - 1, sig.gamma_1)?);
     }
@@ -157,7 +156,18 @@ pub fn sig_encode(sig: &Sig) -> Result<Bytes> {
     Ok(rv)
 }
 
-pub fn sig_decode(sig: &[u8], gamma_1: i32, lambda: i32, l: u32, w: i32) -> Result<Sig> {
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub struct SigOut {
+    c: Bytes,
+    z: Vec<[i32; 256]>,
+    h: Vec<[i32; 256]>,
+    gamma_1: i32,
+    lambda: i32,
+    l: u32,
+    w: i32,
+}
+
+pub fn sig_decode(sig: &[u8], gamma_1: i32, lambda: i32, l: u32, w: i32) -> Result<SigOut> {
     let c_len = (lambda >> 2) as usize;
     let c = Bytes::from(&sig[0..c_len]);
     let mut z = Vec::new();
@@ -173,7 +183,7 @@ pub fn sig_decode(sig: &[u8], gamma_1: i32, lambda: i32, l: u32, w: i32) -> Resu
     }
     let h =
         convert::hint_bit_unpack(&sig[offset..], w).ok_or(anyhow!("Cannot unpack hint bits"))?;
-    Ok(Sig {
+    Ok(SigOut {
         c,
         z,
         h,
@@ -243,7 +253,7 @@ mod tests {
             t0: &t0,
         };
         let encoded = sk_encode(&sk_in, n, d).unwrap();
-        let decoded = sk_decode(&encoded, n, d, k, l).unwrap();
+        let decoded = sk_decode(encoded.as_bytes(), n, d, k, l).unwrap();
         assert_eq!(sk_in.p, decoded.p.as_bytes());
         assert_eq!(sk_in.big_k, decoded.big_k.as_bytes());
         assert_eq!(sk_in.tr, decoded.tr.as_bytes());
@@ -261,9 +271,9 @@ mod tests {
         let z = vec![[0; 256], [1; 256], [2; 256], [3; 256]];
         let h = vec![[0; 256], [0; 256], [0; 256], [0; 256]];
         let sig = Sig {
-            c,
-            z,
-            h,
+            c: c.as_bytes(),
+            z: &z,
+            h: &h,
             gamma_1: (1 << 17),
             lambda: 128,
             l: 4,
@@ -271,7 +281,13 @@ mod tests {
         };
         let encoded = sig_encode(&sig).unwrap();
         let restored = sig_decode(encoded.as_bytes(), 1 << 17, 128, 4, 80).unwrap();
-        assert_eq!(sig, restored);
+        assert_eq!(sig.c, restored.c.as_bytes());
+        assert_eq!(sig.z, &restored.z);
+        assert_eq!(sig.h, &restored.h);
+        assert_eq!(sig.gamma_1, restored.gamma_1);
+        assert_eq!(sig.lambda, restored.lambda);
+        assert_eq!(sig.l, restored.l);
+        assert_eq!(sig.w, restored.w);
     }
 
     #[test]

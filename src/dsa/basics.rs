@@ -30,14 +30,33 @@ pub const ZETAS: [i32; 256] = [
     1054478, 7648983,
 ];
 
+// posimod
+pub fn mod_q_pos(a: i32) -> i32 {
+    let mut v = a;
+    while v < 0 {
+        v += Q;
+    }
+    v % Q
+}
+
 // mod+/-
 pub fn mod_pm(a: i32, q: i32) -> i32 {
-    let r = (a % q) as i32;
-    if r > ((q >> 1) as i32) {
-        r - (q as i32)
+    let r = a % q;
+    if r > q >> 1 {
+        r - q
+    } else if r < (-(q >> 1)) {
+        r + q
     } else {
         r
     }
+}
+
+pub fn mod_vec(v: &[i32; 256], q: i32) -> [i32; 256] {
+    let mut rv = [0; 256];
+    for idx in 0..256 {
+        rv[idx] = mod_pm(v[idx], q);
+    }
+    rv
 }
 
 pub fn power2_round(r: i32, d: i32) -> (i32, i32) {
@@ -47,13 +66,13 @@ pub fn power2_round(r: i32, d: i32) -> (i32, i32) {
 }
 
 pub fn decompose(r: i32, gamma_2: i32) -> (i32, i32) {
-    let r_plus = r % Q;
+    let r_plus = mod_q_pos(r);
     let mut r_0 = mod_pm(r_plus, gamma_2 << 1);
-    let r_1 = if ((r_plus as i32) - r_0) == (Q - 1) as i32 {
+    let r_1 = if r_plus - r_0 == (Q - 1) {
         r_0 -= 1;
         0
     } else {
-        ((r_plus as i32) - r_0) / ((gamma_2 << 1) as i32)
+        (r_plus - r_0) / (gamma_2 << 1)
     };
     (r_1, r_0)
 }
@@ -62,8 +81,24 @@ pub fn high_bits(r: i32, gamma_2: i32) -> i32 {
     decompose(r, gamma_2).0
 }
 
+pub fn high_bits_vec(r: &[i32; 256], gamma_2: i32) -> [i32; 256] {
+    let mut result: [i32; 256] = [0; 256];
+    for (i, v) in r.iter().enumerate() {
+        result[i] = high_bits(*v, gamma_2)
+    }
+    result
+}
+
 pub fn low_bits(r: i32, gamma_2: i32) -> i32 {
     decompose(r, gamma_2).1
+}
+
+pub fn low_bits_vec(r: &[i32; 256], gamma_2: i32) -> [i32; 256] {
+    let mut result: [i32; 256] = [0; 256];
+    for (i, v) in r.iter().enumerate() {
+        result[i] = low_bits(*v, gamma_2)
+    }
+    result
 }
 
 pub fn make_hint(z: i32, r: i32, gamma_2: i32) -> bool {
@@ -107,10 +142,49 @@ pub fn poly_add(a: &[i32; 256], b: &[i32; 256]) -> [i32; 256] {
     rv
 }
 
+pub fn poly_sub(a: &[i32; 256], b: &[i32; 256]) -> [i32; 256] {
+    let mut rv = [0; 256];
+    for i in 0..256 {
+        rv[i] = (a[i] - b[i]) % Q; // mod_pm(a[i] - b[i], Q);
+    }
+    rv
+}
+
 pub fn poly_mulntt(a: &[i32; 256], b: &[i32; 256]) -> [i32; 256] {
     let mut rv = [0; 256];
     for i in 0..256 {
         rv[i] = red_mul(a[i], b[i]);
+    }
+    rv
+}
+
+pub fn poly_count_ones(a: &[i32; 256]) -> usize {
+    a.iter().filter(|x| **x == 1).count()
+}
+
+pub fn poly_make_hint(a: &[i32; 256], b: &[i32; 256], gamma_2: i32) -> [i32; 256] {
+    let mut rv = [0; 256];
+    for i in 0..256 {
+        rv[i] = match make_hint(a[i], b[i], gamma_2) {
+            true => 1,
+            false => 0,
+        };
+    }
+    rv
+}
+
+pub fn poly_pm(a: &[i32; 256]) -> [i32; 256] {
+    let mut rv = [0; 256];
+    for i in 0..256 {
+        rv[i] = mod_pm(a[i], Q);
+    }
+    rv
+}
+
+pub fn minus(a: &[i32; 256]) -> [i32; 256] {
+    let mut rv = [0; 256];
+    for i in 0..256 {
+        rv[i] = -a[i];
     }
     rv
 }
