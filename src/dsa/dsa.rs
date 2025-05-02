@@ -154,6 +154,7 @@ impl MLDSA {
         println!("a_hat = {a_hat:?}");
         // Compute the message representative. H is Shake256
         println!("tr = {}", hex::encode(sk_out.tr.as_bytes()));
+        println!("m_prime = {}", hex::encode(m_prime));
         let mut mu: [u8; 64] = [0; 64];
         {
             let mut xof = Shake256::default();
@@ -183,12 +184,16 @@ impl MLDSA {
         let mut use_zh = false;
         while !use_zh {
             let y = sample::expand_mask(&p_prime_prime, kappa, self.gamma_1, self.l)?;
+            println!("Y after expand_mask = {y:?}");
             let w = {
                 let tmp_0 = y.ntt();
                 let tmp_1 = a_hat.mul_ntt(&tmp_0);
-                tmp_1.inv_ntt()
+                let tmp_2 = tmp_1.inv_ntt();
+                tmp_2.reduce()
             };
+            println!("w = {w:?}");
             let w1 = w.high_bits(self.gamma_2);
+            println!("whigh = {w1:?}");
             {
                 let mut xof = Shake256::default();
                 xof.update(&mu);
@@ -274,6 +279,64 @@ mod tests {
         pub pk: String,
     }
 
+    #[derive(Deserialize, Debug, Default)]
+    struct SigTest {
+        pub sk: String,
+        //pub pk: String,
+        pub msg: String,
+        pub sig: String,
+    }
+
+    #[ignore]
+    #[test]
+    fn test_sig_44() {
+        test_sig(44);
+    }
+
+    #[ignore]
+    #[test]
+    fn test_sig_65() {
+        test_sig(65);
+    }
+
+    #[ignore]
+    #[test]
+    fn test_sig_87() {
+        test_sig(87);
+    }
+
+    fn test_sig(variant: u32) {
+        let file = File::open(format!("fips-vectors/dsa/dsa_{}_sig.json", variant)).unwrap();
+        let reader = BufReader::new(file);
+        let contents: Vec<SigTest> = serde_json::from_reader(reader).unwrap();
+        let ml_dsa = match variant {
+            44 => MLDSA::ml_dsa_44(),
+            65 => MLDSA::ml_dsa_65(),
+            87 => MLDSA::ml_dsa_87(),
+            _ => panic!("Invalid variant"),
+        };
+        for v in contents {
+            println!("********************");
+            // we're in deterministic mode with no context for these tests.
+            let sk = Bytes::from_hex(&v.sk).unwrap();
+            let ctx: [u8; 0] = [];
+            let rnd = Bytes32::from_hex(
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap();
+            println!("msg = {}", &v.msg);
+            println!("expected_sig = {}", &v.sig);
+            println!("sk = {}", &v.sk);
+            let msg = Bytes::from_hex(&v.msg).unwrap();
+            let sig_expect = Bytes::from_hex(&v.sig).unwrap();
+            let signature = ml_dsa
+                .sign(sk.as_bytes(), msg.as_bytes(), &ctx, rnd.as_bytes())
+                .unwrap();
+            println!("sig_computed = {}", hex::encode(signature.as_bytes()));
+            assert_eq!(sig_expect, signature);
+        }
+    }
+
     #[ignore]
     #[test]
     fn test_key_file_44() {
@@ -326,7 +389,6 @@ mod tests {
     }
 
     // Test vectors raided from leancrypto, which can give us intermediate values.
-
     #[test]
     fn test_sign() {
         let sk = Bytes::from_hex("e12a6ad723953484a37d8fe9f86572800fd4a19818f516a79fedff38eb90cf61d9519fb38ece5f34f039adef040d35ac5fcf166649a44cbc76e021186e475815415c0187194c169a1445ef48fa9450daee9fcf2f10f4a5a9a7dbd3c3aaa1f2298f9169c4cbfd108b95295089413eca985016d540268f1a6bfae637a4f3ab2e4113140d0c8591613685e1045119a3719aa484121665c0b021a1a8281888890997314c928513c6304c907024880d23449163108c59469222326e60266403b780cab6240a48490c918ddc20900000609132125ac680640209844889a0462ea244299a2608d3c029118708e3c489a4b65052086c20356d53a2701a374049344e1a18692297111ca14850264ec2884d4c2086020802000340043982c1226551a4901cc945d2440014170aca48491c120291143202257050a4418a84315c34499332240ca42011c02c8cb8705246609c006cc0289289b6200203865b140824a36c80146ca188204cb611dc12244b1009d0406004419218194000c30414346108026800a800604612212846d840610ca571224222a4266edc100559482e8280851922061c35201c46881c416461304d22270214b62920254c889444998225cc106a6302061b026c6146300b212a1c08608b362c8a908dd300711bb72de3a24c84304509a76541425094241149c06d92340104c9418ba24c003771838200a1324d0208508b346c09118554384e09842449967024b12961b24c138071223932a43445cbc6088c1041c0260a09186e0046055a367044246c89406e209340428671db080c18a26d12338e8a86645408051109051b238dc9460183169203940001b22c54c21044900949b285a180819224881bc164c92888e100059932098a84648a0602012508da468502a648980802c1009048021060202d5ba22d5b2400a0b2451a0650e0c2204ca084581072c40472d9424111a93090c224a1a065e4b88c220471822808a4008500a9449b18511bc54dd0320683960c18a3048aa04881000250b05002b0914418601c112650304141100993245110302c04065012228250c2050837000cc06490940d4286804ab4115344221bc32d60c420532620c14665581064839884a000914a862c1a414058304cc0248511406ee1404901366d98a210d32246a0280d44080810260892242d58b8659a326c13180822c20c0b358d24462c0b1172912845c83466d0b830dc024408015013b04de142488c089221050442c091c4342a95a7d42f5771f88b4829d85715693d82343af18c894adfa27ed1f0003993a6afc4b7fe46763b64398b348f260951d9ada16767e36fe39e2d39849ceeefc975de8da89dacffa178284544b575e29d8dd1680bd8959a5fbe5eb0e42e786d438db3e28852d0a883dc8415182d41742fe7a6374adb0df91c49d1cf62cebbf6e6ce2980dc2f8d8a0aa29f67a9e8e0edf86d241d7e384e4a5da1cdcdad46954c230d01673c4f4df7ff0e1e70998c682b32fe1169a05be363f8e5f025bdac27474972299d6317e7c6e811e5d6fb1bcd6a8e25310c2b626249b0e220e0120101f153e416ac624d8579a2fdfec5c522e4b1530f2957d3dbce698e751adb28eac0d66a284f6bb8d37092555d98298cbd39375dbb187f8f0436d5e27d73c86e15488689d81ec5ea9f04ca5aebc5b35dc0d8373cd315760eb1eb6ac98abc9b644c83b3fce4682b4f8b811d3bc68b434b3e88d3aacd817bb65719284801788ae74b55edd8dfe4a491d8a0c8ef49b145eb9824cd6ce40973daf14885a1fa3540f311f1e3e04c430a0908664d84d49e4aadffd08ec633229f937c8eb3c47c234ebbce8592775b0899b6fe0b02191813e4d2f48cc4072deff0a6be63ffbd7fa1bfdd6af2e4f7f1227a17f27e5d6d7825558b127dd3bdf3de658bfa6dc3b921e4df892dddacab5cc30be8a92ed1c75245225e5651b3a8b86162073163645bc38a132a4ae25b136b4178ebe5f53c78988b2aa6c13557d8105b22deb1a76fa76b3e97a4abc56dfec25fc6dc8c29b1aa8851bfbc0a831dbc211cc7acbff8f4c5aae6594d2c83c8eb7bc4c060ed8ec3190589d87b5891ea77521f7bbe8579756772399a7ae973ec8456dd3a54db95f286e342f05fc4f3dc8a5054ac89cbd846596dd259cd4f7a5cda835afc7cdcaade4e61523dff522eb67a34ad2d66c5b3a22932bf67c233ac3b570b443e54dc6da7cf2c0b1e71b3e6f4645c61dcaa59045b491aed4e300bb29d68df1d00b1f2eec2d565f50789cf461a094d63f53acb457afce3bdda9469b4f6571715fb3c5eec8073b181c27200dd0ef67a582ecf8bd2e813e60984edee0b789e6cb31ddd25eed29217d1699bf61c404ab78af0c69d63c52bc5e6f921b95bddc7ac1b07136d075186844ec59413945f1657c85a5706e2ca9f90bbc4e95ec42db9f0d1587b5080459a50a75e903f76b56707aad7a75e6cd6a5b683b76d0099b5846b0c99d33f624cd7bc8be9c5c7f88141944b20af30d2b8cfbdc18e10ba44e04021bd69b6eb6fae5f92005e6a14318990014478aa7c630d10a269010672ebcac9d77ed2116236805cfed8911bbe4914e2929b987b8e503fa7d23306897726e45e2986641efe4d841577a97fe46b5004d5669ceea56607cbc296fcba225a2afa45727426d6a4a3e40e104be3a1bd9cbf89495be587d462c0d39d42f6a12b7f89363dd3fc53d7eed988dac2f6dca94feb519afa1070e552ad7382ef8537594a5b312dac4f9396a2bffb62c4f33c656002eaac9c6a61f57ccd2c0fe245be79fa5635a0d62781b5d1f77f174a6c7f8b005fcec878ccf5beb480b0192d33e77e2aea5ca4ddc4f77dab811e2cf8b040d387f77b9d094a1dbb575b7627394c4fab9e3817d4bec68a3cb8b4d20cbd49b6781978fee898ca1be8ee19033e5a5d08b88df40cad57bcb1253df10b29b6061fee175847de7e59a8dd95c68def80de7a9f7d63306b15ed2b8c7853837f7191816d3080888d584fecbdcc0f5924afc4fae94ad3f6c7e606c8f432e492a737067d4c05627f4bea50e5b87f1007ef63b4f023c64f56d09402be829780db8574adcd6b54205040dade7b7eb5134956c56c56c5fece374344f1117bce4feff86b7797bd476ce2b5bf92a3f404e663d4af63887dc28d8efc896d289e1bf91c70c469099a92a66eab3e50cf316cf97cf69c923f27c637756be7e87b706fe0f83c6b69330adc0fe73d75d90c8b3c706b316f7e7e1733538d6dd1c59f3b5372e128f603100b7e3e5619d1b99844af0f39f3ab8304fb507a2a68ff3907d28b2bd2fe720d68bf66cdde5a573436347e755bbc09d66ca16729b7515b330b7beba68457ffda20dd957b197bb5fb6d74e61381ecb88b35272ef91f6befa354dffb4e0d96bc9a82bff16a61258fee2b35c6f63a311a00a769433edeea4be5b6aad9de5442bf9472cd9df4ec436734dfa9e9ddda90fdecb9e1d6dac0f71dd9c2fc6f52ed90fa8c0020617ab6a28f402ee877915e4642a268f917b7bf02bdc17b2c8b2c920a3924d97e3a3a814d2ef541c718b6c43f05ad2344d4a3e2f1911f35442a1c2e53ca057bd620be3a195714056054ded3fbf50bf46d317a203c7f").unwrap();

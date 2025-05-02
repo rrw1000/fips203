@@ -77,6 +77,7 @@ pub fn bitlen(b: i32) -> u32 {
 pub fn simple_bit_pack(b: i32, r: &[i32; 256]) -> Result<Bytes> {
     let mut z = Bits::default();
     let nr_bits = bitlen(b);
+    println!("sbp bitlen = {nr_bits}");
     for v in r.iter() {
         let mut this_coeff = integer_to_bits(*v, nr_bits);
         z.as_vec_mut().append(this_coeff.as_vec_mut());

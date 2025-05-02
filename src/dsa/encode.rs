@@ -197,7 +197,7 @@ pub fn sig_decode(sig: &[u8], gamma_1: i32, lambda: i32, l: u32, w: i32) -> Resu
 // @todo test this - though there are no test vectors and no inverse, so let's wait until
 // we can do it in the context of ML-DSA.Sign
 pub fn w1_encode(w1: &[[i32; 256]], q: i32, gamma_2: i32) -> Result<Bytes> {
-    let max_coeff = (q - 1) / ((gamma_2 * 2) - 1);
+    let max_coeff = ((q - 1) / (gamma_2 * 2)) - 1;
     let mut result = Bytes::default();
     for v in w1.iter() {
         result.accumulate(convert::simple_bit_pack(max_coeff, v)?);
